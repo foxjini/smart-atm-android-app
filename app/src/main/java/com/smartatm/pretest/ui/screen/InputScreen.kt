@@ -60,7 +60,8 @@ import com.smartatm.pretest.ui.MainViewModel
 fun InputScreen(
     viewModel: MainViewModel,
     onNavigateToSettings: () -> Unit,
-    onNavigateToResult: () -> Unit
+    onNavigateToResult: () -> Unit,
+    onNavigateToMockCall: () -> Unit
 ) {
     val context = LocalContext.current
     val inputText by viewModel.inputText.collectAsState()
@@ -100,6 +101,29 @@ fun InputScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            // PRD v2.0 13-2: 입력 방법 탭 [문자 검사] [Mock 통화]
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = { /* Current Screen */ },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text("📝 문자 검사", fontWeight = FontWeight.Bold)
+                }
+
+                OutlinedButton(
+                    onClick = onNavigateToMockCall,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text("📞 Mock 통화", fontWeight = FontWeight.Bold)
+                }
+            }
+
             // Text Input Card
             Card(
                 modifier = Modifier.fillMaxWidth(),

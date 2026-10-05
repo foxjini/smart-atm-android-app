@@ -12,7 +12,13 @@ import com.smartatm.pretest.data.model.AnalysisResponse
 import com.smartatm.pretest.data.model.LoginRequest
 import com.smartatm.pretest.util.QrCodeGenerator
 import com.smartatm.pretest.util.SpeechManager
+import com.smartatm.pretest.mockcall.CallRole
+import com.smartatm.pretest.mockcall.CallStatus
+import com.smartatm.pretest.mockcall.MockCallManager
+import com.smartatm.pretest.mockcall.MockCallUiState
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -49,6 +55,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     // Speech manager
     private var speechManager: SpeechManager? = null
+
+    // Mock Call Manager (PRD v2.0)
+    val mockCallManager = MockCallManager(
+        context = application,
+        coroutineScope = viewModelScope,
+        onTranscriptReceived = { _, fullText ->
+            analyzeMockCallRealtime(fullText)
+        }
+    )
+    val mockCallUiState: StateFlow<MockCallUiState> = mockCallManager.uiState
+    private var mockAnalysisJob: Job? = null
 
     // UI State
     private val _serverUrl = MutableStateFlow(preferencesManager.serverUrl)
@@ -100,6 +117,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             onFinalResult = { final ->
                 _partialSttText.value = ""
                 appendInputText(final)
+                // 통화 중 공격자 모드일 경우 음성인식 텍스트를 상대방에게 자동 전송
+                if (mockCallUiState.value.callStatus == CallStatus.IN_CALL &&
+                    mockCallUiState.value.currentRole == CallRole.ATTACKER) {
+                    mockCallManager.sendTranscript(final, isLocalSender = true)
+                }
             },
             onErrorOccurred = { error ->
                 _errorMessage.value = error
@@ -304,8 +326,54 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun analyzeMockCallRealtime(text: String) {
+        val trimmed = text.trim()
+        if (trimmed.isBlank()) return
+
+        val token = _authToken.value
+        if (token.isBlank()) return
+
+        mockAnalysisJob?.cancel()
+        mockAnalysisJob = viewModelScope.launch(Dispatchers.IO) {
+            try {
+                delay(300)
+                val service = retrofitProvider.getApiService()
+                val authHeader = "Bearer $token"
+                val request = AnalysisRequest(message = trimmed)
+                val response = service.analyzeMessage(authHeader, request)
+
+                if (response.isSuccessful && response.body() != null) {
+                    val data = response.body()!!.data
+                    val warning = when (data.riskLevel) {
+                        "DANGER" -> "⚠️ 보이스피싱 강력 의심! (위험 점수: ${data.riskScore}/100) 즉시 통화를 종료하세요."
+                        "CAUTION" -> "⚠️ 의심스러운 금융/기관 언급이 감지되었습니다. (주의 점수: ${data.riskScore}/100)"
+                        else -> null
+                    }
+                    mockCallManager.updateRiskAnalysis(
+                        riskLevel = data.riskLevel,
+                        riskScore = data.riskScore,
+                        summary = data.summary,
+                        reasons = data.reasons,
+                        warning = warning
+                    )
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Mock call real-time analysis error: ${e.message}")
+            }
+        }
+    }
+
+    fun confirmMockCallResult(onSuccess: () -> Unit) {
+        val fullTranscript = mockCallManager.getAccumulatedTranscript()
+        if (fullTranscript.isNotBlank()) {
+            setInputText(fullTranscript)
+        }
+        analyze(onSuccess = onSuccess)
+    }
+
     override fun onCleared() {
         super.onCleared()
         speechManager?.destroy()
+        mockCallManager.destroy()
     }
 }

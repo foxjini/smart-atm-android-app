@@ -15,6 +15,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.smartatm.pretest.ui.MainViewModel
 import com.smartatm.pretest.ui.screen.InputScreen
+import com.smartatm.pretest.ui.screen.MockCallScreen
 import com.smartatm.pretest.ui.screen.ResultScreen
 import com.smartatm.pretest.ui.screen.SettingsScreen
 import com.smartatm.pretest.ui.theme.SmartATMPretestTheme
@@ -69,6 +70,15 @@ fun AppNavigation(viewModel: MainViewModel) {
             InputScreen(
                 viewModel = viewModel,
                 onNavigateToSettings = { navController.navigate("settings") },
+                onNavigateToResult = { navController.navigate("result") },
+                onNavigateToMockCall = { navController.navigate("mock_call") }
+            )
+        }
+
+        composable("mock_call") {
+            MockCallScreen(
+                viewModel = viewModel,
+                onNavigateBack = { navController.popBackStack() },
                 onNavigateToResult = { navController.navigate("result") }
             )
         }

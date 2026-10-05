@@ -80,4 +80,19 @@ class SerializationTest {
         assertNotNull(parsed.detail)
         assertEquals("INVALID_CREDENTIALS", parsed.detail?.code)
     }
+
+    @Test
+    fun testMockCallControlMessageSerialization() {
+        val msg = com.smartatm.pretest.mockcall.ControlMessage(
+            type = com.smartatm.pretest.mockcall.MessageType.CALL_OFFER,
+            senderRole = "ATTACKER",
+            senderIp = "192.168.0.45",
+            roomId = "VP-CALL-001"
+        )
+        val raw = json.encodeToString(msg)
+        assert(raw.contains("CALL_OFFER"))
+        val decoded = json.decodeFromString<com.smartatm.pretest.mockcall.ControlMessage>(raw)
+        assertEquals(com.smartatm.pretest.mockcall.MessageType.CALL_OFFER, decoded.type)
+        assertEquals("VP-CALL-001", decoded.roomId)
+    }
 }
