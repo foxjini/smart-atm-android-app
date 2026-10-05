@@ -91,6 +91,11 @@ fun MockCallScreen(
     val context = LocalContext.current
     val uiState by viewModel.mockCallUiState.collectAsState()
     val isListening by viewModel.isListening.collectAsState()
+    val partialSttText by viewModel.partialSttText.collectAsState()
+    val rmsVolume by viewModel.rmsVolume.collectAsState()
+    val speechStatusText by viewModel.speechStatusText.collectAsState()
+    val errorMessage by viewModel.errorMessage.collectAsState()
+    val authToken by viewModel.authToken.collectAsState()
     var targetIpInput by remember { mutableStateOf("") }
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -98,6 +103,52 @@ fun MockCallScreen(
     ) { isGranted ->
         if (isGranted) {
             viewModel.mockCallManager.makeCall()
+        }
+    }
+
+    // 시스템 표준 구글 음성인식 팝업 다이얼로그 런처 (하드웨어/기기 호환 100% 안전장치)
+    val speechDialogLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            val spokenText = result.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()?.trim()
+            if (!spokenText.isNullOrBlank()) {
+                viewModel.handleVoiceRecognitionResult(spokenText)
+            }
+        }
+    }
+
+    val onLaunchSpeechDialog = {
+        val intent = android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, "ko-KR")
+            putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, "음성으로 말씀하세요...")
+        }
+        try {
+            speechDialogLauncher.launch(intent)
+        } catch (e: Exception) {
+            // Ignore
+        }
+    }
+
+    // 통화 연결 시 음성 인식(STT) 자동 활성화 및 종료 시 자동 비활성화
+    LaunchedEffect(uiState.callStatus) {
+        if (uiState.callStatus == CallStatus.IN_CALL) {
+            val hasPermission = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.RECORD_AUDIO
+            ) == PackageManager.PERMISSION_GRANTED
+            if (hasPermission) {
+                if (!isListening) {
+                    viewModel.startListening()
+                }
+            } else {
+                permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            }
+        } else if (uiState.callStatus == CallStatus.ENDED || uiState.callStatus == CallStatus.IDLE) {
+            if (isListening) {
+                viewModel.stopListening()
+            }
         }
     }
 
@@ -125,7 +176,14 @@ fun MockCallScreen(
                     InCallView(
                         uiState = uiState,
                         isListening = isListening,
+                        partialSttText = partialSttText,
+                        rmsVolume = rmsVolume,
+                        speechStatusText = speechStatusText,
+                        errorMessage = errorMessage,
+                        onClearError = { viewModel.clearError() },
+                        hasAuthToken = authToken.isNotBlank(),
                         onToggleListening = { viewModel.toggleListening() },
+                        onLaunchSpeechDialog = onLaunchSpeechDialog,
                         onEndCall = { viewModel.mockCallManager.endCall() },
                         onToggleMute = { viewModel.mockCallManager.toggleMute() },
                         onToggleSpeaker = { viewModel.mockCallManager.toggleSpeaker() },
@@ -208,7 +266,14 @@ fun MockCallScreen(
 private fun InCallView(
     uiState: com.smartatm.pretest.mockcall.MockCallUiState,
     isListening: Boolean,
+    partialSttText: String,
+    rmsVolume: Float,
+    speechStatusText: String,
+    errorMessage: String?,
+    onClearError: () -> Unit,
+    hasAuthToken: Boolean,
     onToggleListening: () -> Unit,
+    onLaunchSpeechDialog: () -> Unit,
     onEndCall: () -> Unit,
     onToggleMute: () -> Unit,
     onToggleSpeaker: () -> Unit,
@@ -244,6 +309,48 @@ private fun InCallView(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
+        // 음성인식/네트워크 에러 알림 카드
+        if (!errorMessage.isNullOrBlank()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE)),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = Color(0xFFC62828),
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = errorMessage,
+                            color = Color(0xFFC62828),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    IconButton(
+                        onClick = onClearError,
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Text("✕", fontSize = 14.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
         // 상단 통화 정보 헤더
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -270,11 +377,22 @@ private fun InCallView(
                             fontWeight = FontWeight.Bold,
                             fontSize = 15.sp
                         )
-                        Text(
-                            text = "내 역할: ${uiState.currentRole.title}",
-                            fontSize = 12.sp,
-                            color = Color.DarkGray
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "내 역할: ${uiState.currentRole.title}",
+                                fontSize = 12.sp,
+                                color = Color.DarkGray
+                            )
+                            if (uiState.currentRole == CallRole.VICTIM) {
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = if (hasAuthToken) "• 서버 AI 연동" else "• 온디바이스 실시간 분석",
+                                    fontSize = 11.sp,
+                                    color = if (hasAuthToken) Color(0xFF1565C0) else Color(0xFF2E7D32),
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
                     }
                 }
 
@@ -362,12 +480,80 @@ private fun InCallView(
                     .fillMaxSize()
                     .padding(12.dp)
             ) {
-                Text(
-                    text = "실시간 음성 자막 (STT 누적 대화):",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "실시간 음성 자막 (STT 누적 대화):",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(if (isListening) Color(0xFF2E7D32) else Color.Gray)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = if (isListening) speechStatusText else "인식 일시정지",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isListening) Color(0xFF2E7D32) else Color.Gray,
+                            maxLines = 1
+                        )
+                        if (isListening) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            androidx.compose.material3.LinearProgressIndicator(
+                                progress = { rmsVolume },
+                                modifier = Modifier
+                                    .width(48.dp)
+                                    .height(6.dp)
+                                    .clip(RoundedCornerShape(3.dp)),
+                                color = Color(0xFF2E7D32),
+                                trackColor = Color(0xFFC8E6C9)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        // 시스템 구글 음성인식 팝업 버튼 (호환성 100% 백업)
+                        Surface(
+                            onClick = onLaunchSpeechDialog,
+                            shape = RoundedCornerShape(6.dp),
+                            color = Color(0xFFE3F2FD),
+                            modifier = Modifier.height(26.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("🎙️구글 팝업", fontSize = 10.sp, color = Color(0xFF1565C0), fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
                 Spacer(modifier = Modifier.height(6.dp))
+
+                // 실시간 음성인식 임시 프리뷰 (사용자가 말하고 있을 때 즉각 반응 표시)
+                if (isListening && partialSttText.isNotBlank()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFFE8F5E9))
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = partialSttText,
+                            color = Color(0xFF2E7D32),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                }
 
                 if (uiState.liveTranscript.isEmpty()) {
                     Box(
@@ -377,9 +563,14 @@ private fun InCallView(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "대화 음성을 분석하는 중입니다...\n마이크에 대고 말하거나 아래 대본을 전송하세요.",
+                            text = if (isListening) {
+                                "🎙️ 마이크로 말씀하시면 실시간 텍스트로 변환 및 분석됩니다.\n소음이 많거나 테스트 시 아래 대본 칩을 전송할 수 있습니다."
+                            } else {
+                                "음성 인식이 일시정지되었습니다.\n하단 귀 모양/마이크 버튼을 눌러 다시 활성화하세요."
+                            },
                             color = Color.Gray,
-                            fontSize = 14.sp
+                            fontSize = 13.sp,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
                         )
                     }
                 } else {
@@ -430,12 +621,12 @@ private fun InCallView(
             }
         }
 
-        // 공격자 모드일 경우: 원클릭 시연 대본 퀵 전송 버튼 (전시장 안정성 확보용)
-        if (uiState.currentRole == CallRole.ATTACKER) {
-            Column(modifier = Modifier.fillMaxWidth()) {
+        // 시연용 퀵 대본 전송 버튼 (전시장/주변 소음 및 단독 테스트 대비용)
+        Column(modifier = Modifier.fillMaxWidth()) {
+            if (uiState.currentRole == CallRole.ATTACKER) {
                 Text(
                     text = "공격자 시연 대본 퀵 전송 (원클릭):",
-                    fontSize = 13.sp,
+                    fontSize = 12.sp,
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(modifier = Modifier.height(4.dp))
@@ -446,12 +637,34 @@ private fun InCallView(
                     FilterChip(
                         selected = false,
                         onClick = { onSendScript("여보세요, 서울중앙지검 수사관입니다. 대포통장 사건에 연루되어 수사 중입니다.") },
-                        label = { Text("1. 수사관 사칭 (주의)", fontSize = 12.sp) }
+                        label = { Text("1. 수사관 사칭 (주의)", fontSize = 11.sp) }
                     )
                     FilterChip(
                         selected = false,
                         onClick = { onSendScript("지금 즉시 은행에 가셔서 예금을 전액 인출하여 안전계좌로 입금하셔야 합니다.") },
-                        label = { Text("2. 안전계좌 이체 (위험 100점)", fontSize = 12.sp) }
+                        label = { Text("2. 안전계좌 이체 (위험 100점)", fontSize = 11.sp) }
+                    )
+                }
+            } else {
+                Text(
+                    text = "피해자 시연 응답 퀵 전송 (원클릭):",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    FilterChip(
+                        selected = false,
+                        onClick = { onSendScript("누구시라고요? 제 통장이 왜 범죄에 연루되었나요?") },
+                        label = { Text("1. 의심 질문", fontSize = 11.sp) }
+                    )
+                    FilterChip(
+                        selected = false,
+                        onClick = { onSendScript("돈을 찾아서 어디로 가져가면 되나요? 알려주세요.") },
+                        label = { Text("2. 인출 문의", fontSize = 11.sp) }
                     )
                 }
             }
@@ -508,9 +721,9 @@ private fun InCallView(
                     )
             ) {
                 Icon(
-                    imageVector = Icons.AutoMirrored.Filled.Send,
-                    contentDescription = "음성인식",
-                    tint = if (isListening) Color(0xFF7B1FA2) else Color.Black
+                    imageVector = if (isListening) Icons.Default.PhoneInTalk else Icons.Default.Call,
+                    contentDescription = "실시간 STT 음성인식 토글",
+                    tint = if (isListening) Color(0xFF7B1FA2) else Color.Gray
                 )
             }
 

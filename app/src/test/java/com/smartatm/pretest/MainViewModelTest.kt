@@ -21,4 +21,12 @@ class MainViewModelTest {
         val qrPayload = "{\"session_id\": \"$sessionId\"}"
         assertEquals("{\"session_id\": \"VP-000012\"}", qrPayload)
     }
+
+    @Test
+    fun testAtmTransferRiskAnalysis() {
+        val result = com.smartatm.pretest.util.LocalRiskAnalyzer.analyze("ATM에 가서 송금")
+        assertEquals("DANGER", result.riskLevel)
+        assertTrue("위험 점수가 85점 이상이어야 함", result.riskScore >= 85)
+        assertTrue("ATM 또는 송금 관련 감지 이유가 포함되어야 함", result.reasons.any { it.contains("ATM") || it.contains("송금") })
+    }
 }

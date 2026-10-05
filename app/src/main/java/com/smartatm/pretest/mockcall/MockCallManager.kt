@@ -187,7 +187,12 @@ class MockCallManager(
      * 전화 수락 (CALL_ANSWER)
      */
     fun acceptCall() {
-        val peerIp = _uiState.value.remotePeerIp ?: return
+        val socketIp = controlSocket?.inetAddress?.hostAddress
+        val peerIp = if (!socketIp.isNullOrBlank() && socketIp != "127.0.0.1") {
+            socketIp
+        } else {
+            _uiState.value.remotePeerIp ?: return
+        }
         sendControlMessage(
             ControlMessage(
                 type = MessageType.CALL_ANSWER,
@@ -324,6 +329,14 @@ class MockCallManager(
         _uiState.update { it.copy(isSpeakerOn = newSpeaker) }
     }
 
+    fun pauseAudioRecord() {
+        audioStreamer.pauseRecording()
+    }
+
+    fun resumeAudioRecord() {
+        audioStreamer.resumeRecording()
+    }
+
     fun getAccumulatedTranscript(): String {
         return accumulatedStringBuilder.toString()
     }
@@ -348,16 +361,23 @@ class MockCallManager(
             val message = json.decodeFromString<ControlMessage>(raw)
             when (message.type) {
                 MessageType.CALL_OFFER -> {
+                    val socketIp = controlSocket?.inetAddress?.hostAddress
+                    val effectivePeerIp = if (!socketIp.isNullOrBlank() && socketIp != "127.0.0.1") socketIp else message.senderIp
                     _uiState.update {
                         it.copy(
                             callStatus = CallStatus.INCOMING_CALL,
-                            remotePeerIp = message.senderIp
+                            remotePeerIp = effectivePeerIp
                         )
                     }
                 }
                 MessageType.CALL_ANSWER -> {
-                    val peerIp = _uiState.value.remotePeerIp ?: message.senderIp
-                    startCallSession(peerIp)
+                    val socketIp = controlSocket?.inetAddress?.hostAddress
+                    val effectivePeerIp = if (!socketIp.isNullOrBlank() && socketIp != "127.0.0.1") {
+                        socketIp
+                    } else {
+                        _uiState.value.remotePeerIp ?: message.senderIp
+                    }
+                    startCallSession(effectivePeerIp)
                 }
                 MessageType.CALL_REJECT -> {
                     _uiState.update { it.copy(callStatus = CallStatus.PEER_CONNECTED) }

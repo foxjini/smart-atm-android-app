@@ -45,14 +45,14 @@ class MockAudioStreamer(private val context: Context) {
         }
 
         try {
-            // 1. AudioTrack (수신 및 재생) 설정
+            // 1. AudioTrack (수신 및 재생) 설정 - 라우드스피커로 선명하게 출력되도록 USAGE_MEDIA 사용
             val minPlayBuf = AudioTrack.getMinBufferSize(SAMPLE_RATE, CHANNEL_OUT, ENCODING)
             val playBufSize = maxOf(minPlayBuf, BUFFER_CHUNK_SIZE * 4)
 
             audioTrack = AudioTrack.Builder()
                 .setAudioAttributes(
                     AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
                         .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                         .build()
                 )
@@ -67,29 +67,18 @@ class MockAudioStreamer(private val context: Context) {
                 .setTransferMode(AudioTrack.MODE_STREAM)
                 .build()
 
+            audioTrack?.setVolume(1.0f)
             audioTrack?.play()
 
             // 2. AudioRecord (송신) 설정
-            val minRecBuf = AudioRecord.getMinBufferSize(SAMPLE_RATE, CHANNEL_IN, ENCODING)
-            val recBufSize = maxOf(minRecBuf, BUFFER_CHUNK_SIZE * 4)
+            createAndStartAudioRecord()
 
-            audioRecord = AudioRecord(
-                MediaRecorder.AudioSource.VOICE_COMMUNICATION,
-                SAMPLE_RATE,
-                CHANNEL_IN,
-                ENCODING,
-                recBufSize
-            )
+            // 3. 소켓 초기화 (reuseAddress를 bind 전에 반드시 설정)
 
-            if (audioRecord?.state == AudioRecord.STATE_INITIALIZED) {
-                audioRecord?.startRecording()
-            } else {
-                Log.e(TAG, "AudioRecord initialization failed")
-            }
-
-            // 3. 소켓 초기화
-            receiveSocket = DatagramSocket(NetworkUtils.PORT_AUDIO).apply {
+            // 3. 소켓 초기화 (reuseAddress를 bind 전에 반드시 설정)
+            receiveSocket = DatagramSocket(null).apply {
                 reuseAddress = true
+                bind(java.net.InetSocketAddress(NetworkUtils.PORT_AUDIO))
                 soTimeout = 2000
             }
             sendSocket = DatagramSocket()
@@ -101,9 +90,9 @@ class MockAudioStreamer(private val context: Context) {
                 val buffer = ByteArray(BUFFER_CHUNK_SIZE)
                 while (isRunning.get()) {
                     try {
-                        val record = audioRecord ?: break
-                        if (record.recordingState != AudioRecord.RECORDSTATE_RECORDING) {
-                            Thread.sleep(10)
+                        val record = audioRecord
+                        if (record == null || isRecordingPaused.get() || record.recordingState != AudioRecord.RECORDSTATE_RECORDING) {
+                            Thread.sleep(50)
                             continue
                         }
 
@@ -116,6 +105,8 @@ class MockAudioStreamer(private val context: Context) {
                                 NetworkUtils.PORT_AUDIO
                             )
                             sendSocket?.send(packet)
+                        } else if (bytesRead < 0) {
+                            Log.w(TAG, "AudioRecord.read error: $bytesRead")
                         }
                     } catch (e: Exception) {
                         if (isRunning.get()) {
@@ -132,6 +123,8 @@ class MockAudioStreamer(private val context: Context) {
 
                 while (isRunning.get()) {
                     try {
+                        // 중요: DatagramPacket 재사용 시 직전 수신 크기로 줄어든 length를 원래 버퍼 크기로 리셋
+                        packet.length = receiveBuf.size
                         receiveSocket?.receive(packet)
                         if (packet.length > 0 && isRunning.get()) {
                             audioTrack?.write(packet.data, packet.offset, packet.length)
@@ -186,9 +179,85 @@ class MockAudioStreamer(private val context: Context) {
             }
             audioTrack = null
 
+            setSpeakerphoneOn(false)
             Log.d(TAG, "Audio streaming stopped")
         } catch (e: Exception) {
             Log.e(TAG, "Error while stopping streamer", e)
+        }
+    }
+
+    private val isRecordingPaused = AtomicBoolean(false)
+
+    @Synchronized
+    private fun createAndStartAudioRecord() {
+        try {
+            audioRecord?.release()
+        } catch (_: Exception) {}
+        audioRecord = null
+
+        val minRecBuf = AudioRecord.getMinBufferSize(SAMPLE_RATE, CHANNEL_IN, ENCODING)
+        val recBufSize = maxOf(minRecBuf, BUFFER_CHUNK_SIZE * 4)
+
+        audioRecord = try {
+            AudioRecord(
+                MediaRecorder.AudioSource.VOICE_COMMUNICATION,
+                SAMPLE_RATE,
+                CHANNEL_IN,
+                ENCODING,
+                recBufSize
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to create AudioRecord with VOICE_COMMUNICATION source, falling back to MIC", e)
+            try {
+                AudioRecord(
+                    MediaRecorder.AudioSource.MIC,
+                    SAMPLE_RATE,
+                    CHANNEL_IN,
+                    ENCODING,
+                    recBufSize
+                )
+            } catch (e2: Exception) {
+                AudioRecord(
+                    MediaRecorder.AudioSource.DEFAULT,
+                    SAMPLE_RATE,
+                    CHANNEL_IN,
+                    ENCODING,
+                    recBufSize
+                )
+            }
+        }
+
+        if (audioRecord?.state == AudioRecord.STATE_INITIALIZED) {
+            audioRecord?.startRecording()
+            Log.d(TAG, "AudioRecord created and started successfully (source=${audioRecord?.audioSource})")
+        } else {
+            Log.e(TAG, "AudioRecord initialization failed (state=${audioRecord?.state})")
+        }
+    }
+
+    fun pauseRecording() {
+        if (!isRecordingPaused.getAndSet(true)) {
+            try {
+                audioRecord?.stop()
+                audioRecord?.release()
+                audioRecord = null
+                Log.d(TAG, "AudioRecord completely released for SpeechRecognizer exclusive access")
+            } catch (e: Exception) {
+                Log.w(TAG, "Error releasing AudioRecord", e)
+            }
+        }
+    }
+
+    fun resumeRecording() {
+        if (isRecordingPaused.getAndSet(false)) {
+            try {
+                if (isRunning.get()) {
+                    createAndStartAudioRecord()
+                    Log.d(TAG, "AudioRecord recreated and resumed after SpeechRecognizer")
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Error resuming AudioRecord", e)
+            }
         }
     }
 
@@ -198,9 +267,24 @@ class MockAudioStreamer(private val context: Context) {
 
     fun setSpeakerphoneOn(speakerOn: Boolean) {
         try {
-            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
-            audioManager?.mode = if (speakerOn) AudioManager.MODE_IN_COMMUNICATION else AudioManager.MODE_NORMAL
-            audioManager?.isSpeakerphoneOn = speakerOn
+            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                if (speakerOn) {
+                    val speakerDevice = audioManager.availableCommunicationDevices.firstOrNull {
+                        it.type == android.media.AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
+                    }
+                    if (speakerDevice != null) {
+                        audioManager.setCommunicationDevice(speakerDevice)
+                    }
+                } else {
+                    audioManager.clearCommunicationDevice()
+                }
+            } else {
+                @Suppress("DEPRECATION")
+                audioManager.mode = if (speakerOn) AudioManager.MODE_IN_COMMUNICATION else AudioManager.MODE_NORMAL
+                @Suppress("DEPRECATION")
+                audioManager.isSpeakerphoneOn = speakerOn
+            }
         } catch (e: Exception) {
             Log.w(TAG, "Failed to toggle speakerphone", e)
         }

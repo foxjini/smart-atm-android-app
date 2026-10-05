@@ -10,6 +10,7 @@ import com.smartatm.pretest.data.local.PreferencesManager
 import com.smartatm.pretest.data.model.AnalysisRequest
 import com.smartatm.pretest.data.model.AnalysisResponse
 import com.smartatm.pretest.data.model.LoginRequest
+import com.smartatm.pretest.util.LocalRiskAnalyzer
 import com.smartatm.pretest.util.QrCodeGenerator
 import com.smartatm.pretest.util.SpeechManager
 import com.smartatm.pretest.mockcall.CallRole
@@ -104,8 +105,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _qrBitmap = MutableStateFlow<Bitmap?>(null)
     val qrBitmap: StateFlow<Bitmap?> = _qrBitmap.asStateFlow()
 
+    private val _rmsVolume = MutableStateFlow(0f)
+    val rmsVolume: StateFlow<Float> = _rmsVolume.asStateFlow()
+
+    private val _speechStatusText = MutableStateFlow("대기 중")
+    val speechStatusText: StateFlow<String> = _speechStatusText.asStateFlow()
+
     init {
         initSpeechManager()
+    }
+
+    fun attachActivityContext(activityContext: android.content.Context) {
+        speechManager?.updateContext(activityContext)
     }
 
     private fun initSpeechManager() {
@@ -117,16 +128,38 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             onFinalResult = { final ->
                 _partialSttText.value = ""
                 appendInputText(final)
-                // 통화 중 공격자 모드일 경우 음성인식 텍스트를 상대방에게 자동 전송
-                if (mockCallUiState.value.callStatus == CallStatus.IN_CALL &&
-                    mockCallUiState.value.currentRole == CallRole.ATTACKER) {
+                // 통화 중일 경우 (공격자 또는 피해자) 음성인식 텍스트를 실시간 자막 및 분석에 반영
+                if (mockCallUiState.value.callStatus == CallStatus.IN_CALL) {
                     mockCallManager.sendTranscript(final, isLocalSender = true)
                 }
             },
             onErrorOccurred = { error ->
                 _errorMessage.value = error
+                _rmsVolume.value = 0f
+            },
+            onRmsChanged = { rms ->
+                // rmsdB is typically between -2.0f and 10.0f; normalize to 0.0 ~ 1.0f
+                val normalized = ((rms + 2f) / 12f).coerceIn(0f, 1f)
+                _rmsVolume.value = normalized
+            },
+            onStateChanged = { status ->
+                _speechStatusText.value = status
             }
         )
+    }
+
+    /**
+     * Google 음성 인식 시스템 다이얼로그나 외부 인식기에서 반환된 텍스트 처리
+     */
+    fun handleVoiceRecognitionResult(recognizedText: String) {
+        val trimmed = recognizedText.trim()
+        if (trimmed.isNotBlank()) {
+            appendInputText(trimmed)
+            _speechStatusText.value = "✅ 음성 입력 완료: \"$trimmed\""
+            if (mockCallUiState.value.callStatus == CallStatus.IN_CALL) {
+                mockCallManager.sendTranscript(trimmed, isLocalSender = true)
+            }
+        }
     }
 
     fun updateServerUrl(url: String) {
@@ -232,12 +265,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun startListening() {
         _isListening.value = true
         _partialSttText.value = ""
+        // 통화 중이면 오디오 스트리머의 마이크를 잠시 정지하여 SpeechRecognizer에 마이크 독점 권한 부여
+        if (mockCallUiState.value.callStatus == CallStatus.IN_CALL) {
+            mockCallManager.pauseAudioRecord()
+        }
         speechManager?.startListening()
     }
 
     fun stopListening() {
         _isListening.value = false
+        _rmsVolume.value = 0f
         speechManager?.stopListening()
+        // 통화 중이면 오디오 스트리머 마이크 복구
+        if (mockCallUiState.value.callStatus == CallStatus.IN_CALL) {
+            mockCallManager.resumeAudioRecord()
+        }
         if (_partialSttText.value.isNotBlank()) {
             appendInputText(_partialSttText.value)
             _partialSttText.value = ""
@@ -251,15 +293,39 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
-        val token = _authToken.value
-        if (token.isBlank()) {
-            _errorMessage.value = "로그인이 필요합니다. 설정 화면에서 로그인해 주세요."
-            return
-        }
-
         viewModelScope.launch {
             _isLoading.value = true
             _errorMessage.value = null
+
+            val token = _authToken.value
+            if (token.isBlank()) {
+                // 로그인하지 않은 오프라인 환경: 온디바이스 지능형 분석 즉시 수행
+                val localResult = LocalRiskAnalyzer.analyze(message)
+                val fakeSessionId = "local-${System.currentTimeMillis()}"
+                val response = AnalysisResponse(
+                    sessionId = fakeSessionId,
+                    riskScore = localResult.riskScore,
+                    riskLevel = localResult.riskLevel,
+                    summary = localResult.summary,
+                    reasons = localResult.reasons,
+                    atmAction = if (localResult.riskLevel == "DANGER") "BLOCK" else if (localResult.riskLevel == "CAUTION") "VERIFY" else "ALLOW"
+                )
+                _analysisResult.value = response
+
+                if (localResult.riskLevel != "SAFE") {
+                    val qrPayload = "{\"session_id\": \"$fakeSessionId\"}"
+                    val bitmap = withContext(Dispatchers.Default) {
+                        QrCodeGenerator.generateQrBitmap(qrPayload, 800)
+                    }
+                    _qrBitmap.value = bitmap
+                } else {
+                    _qrBitmap.value = null
+                }
+                _isLoading.value = false
+                onSuccess?.invoke()
+                return@launch
+            }
+
             try {
                 val service = retrofitProvider.getApiService()
                 val authHeader = "Bearer $token"
@@ -283,13 +349,47 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
                     onSuccess?.invoke()
                 } else {
-                    val errorBody = response.errorBody()?.string()
-                    val msg = parseErrorMessage(errorBody, "분석 요청 실패 (HTTP ${response.code()})")
-                    _errorMessage.value = msg
+                    // 서버 실패 시 로컬 온디바이스 분석으로 graceful fallback
+                    Log.w(TAG, "Backend analysis failed (HTTP ${response.code()}), falling back to local analysis")
+                    val localResult = LocalRiskAnalyzer.analyze(message)
+                    val fakeSessionId = "local-${System.currentTimeMillis()}"
+                    _analysisResult.value = AnalysisResponse(
+                        sessionId = fakeSessionId,
+                        riskScore = localResult.riskScore,
+                        riskLevel = localResult.riskLevel,
+                        summary = localResult.summary,
+                        reasons = localResult.reasons,
+                        atmAction = if (localResult.riskLevel == "DANGER") "BLOCK" else if (localResult.riskLevel == "CAUTION") "VERIFY" else "ALLOW"
+                    )
+                    if (localResult.riskLevel != "SAFE") {
+                        val qrPayload = "{\"session_id\": \"$fakeSessionId\"}"
+                        val bitmap = withContext(Dispatchers.Default) {
+                            QrCodeGenerator.generateQrBitmap(qrPayload, 800)
+                        }
+                        _qrBitmap.value = bitmap
+                    }
+                    onSuccess?.invoke()
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Analysis request failed", e)
-                _errorMessage.value = "서버에 연결할 수 없습니다: ${_serverUrl.value}"
+                Log.e(TAG, "Analysis network failed, falling back to local analysis", e)
+                val localResult = LocalRiskAnalyzer.analyze(message)
+                val fakeSessionId = "local-${System.currentTimeMillis()}"
+                _analysisResult.value = AnalysisResponse(
+                    sessionId = fakeSessionId,
+                    riskScore = localResult.riskScore,
+                    riskLevel = localResult.riskLevel,
+                    summary = localResult.summary,
+                    reasons = localResult.reasons,
+                    atmAction = if (localResult.riskLevel == "DANGER") "BLOCK" else if (localResult.riskLevel == "CAUTION") "VERIFY" else "ALLOW"
+                )
+                if (localResult.riskLevel != "SAFE") {
+                    val qrPayload = "{\"session_id\": \"$fakeSessionId\"}"
+                    val bitmap = withContext(Dispatchers.Default) {
+                        QrCodeGenerator.generateQrBitmap(qrPayload, 800)
+                    }
+                    _qrBitmap.value = bitmap
+                }
+                onSuccess?.invoke()
             } finally {
                 _isLoading.value = false
             }
@@ -330,8 +430,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val trimmed = text.trim()
         if (trimmed.isBlank()) return
 
+        // 1. 서버 로그인 여부와 관계없이 온디바이스 로컬 규칙 분석을 즉시 적용 (0ms 지연)
+        val localResult = LocalRiskAnalyzer.analyze(trimmed)
+        mockCallManager.updateRiskAnalysis(
+            riskLevel = localResult.riskLevel,
+            riskScore = localResult.riskScore,
+            summary = localResult.summary,
+            reasons = localResult.reasons,
+            warning = localResult.warning
+        )
+
+        // 2. 서버 토큰이 존재하는 경우 백엔드 AI 모델로 심층 보강 분석 (옵션)
         val token = _authToken.value
-        if (token.isBlank()) return
+        if (token.isBlank()) {
+            return // 비로그인 상태라도 로컬 온디바이스 분석이 이미 완벽히 완료되어 화면에 표출됨
+        }
 
         mockAnalysisJob?.cancel()
         mockAnalysisJob = viewModelScope.launch(Dispatchers.IO) {
@@ -358,7 +471,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "Mock call real-time analysis error: ${e.message}")
+                // 서버 연결 실패 시에도 로컬 분석 결과가 안전하게 유지됨
+                Log.d(TAG, "Backend analysis skipped/error: ${e.message}")
             }
         }
     }
@@ -368,7 +482,38 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (fullTranscript.isNotBlank()) {
             setInputText(fullTranscript)
         }
-        analyze(onSuccess = onSuccess)
+
+        val token = _authToken.value
+        if (token.isBlank()) {
+            // 로그인하지 않은 경우에도 통화 종료 후 결과 화면 및 ATM 차단 QR 정상 생성
+            val localResult = LocalRiskAnalyzer.analyze(fullTranscript)
+            val fakeSessionId = "mock-call-${System.currentTimeMillis()}"
+            val response = AnalysisResponse(
+                sessionId = fakeSessionId,
+                riskScore = localResult.riskScore,
+                riskLevel = localResult.riskLevel,
+                summary = localResult.summary,
+                reasons = localResult.reasons,
+                atmAction = if (localResult.riskLevel == "DANGER") "BLOCK" else if (localResult.riskLevel == "CAUTION") "VERIFY" else "ALLOW"
+            )
+            _analysisResult.value = response
+
+            if (localResult.riskLevel != "SAFE") {
+                val qrPayload = "{\"session_id\": \"$fakeSessionId\"}"
+                viewModelScope.launch(Dispatchers.Default) {
+                    val bitmap = QrCodeGenerator.generateQrBitmap(qrPayload, 800)
+                    _qrBitmap.value = bitmap
+                    withContext(Dispatchers.Main) {
+                        onSuccess.invoke()
+                    }
+                }
+            } else {
+                _qrBitmap.value = null
+                onSuccess.invoke()
+            }
+        } else {
+            analyze(onSuccess = onSuccess)
+        }
     }
 
     override fun onCleared() {

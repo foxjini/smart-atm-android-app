@@ -2,6 +2,9 @@ package com.smartatm.pretest.ui.screen
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.app.Activity
+import android.content.Intent
+import android.speech.RecognizerIntent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -69,6 +72,21 @@ fun InputScreen(
     val isListening by viewModel.isListening.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
+    val rmsVolume by viewModel.rmsVolume.collectAsState()
+    val speechStatusText by viewModel.speechStatusText.collectAsState()
+
+    // 100% 호환 보장: Android 시스템 Google 음성인식 대화상자 런처
+    val speechDialogLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val matches = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+            val recognizedText = matches?.firstOrNull() ?: ""
+            if (recognizedText.isNotBlank()) {
+                viewModel.handleVoiceRecognitionResult(recognizedText)
+            }
+        }
+    }
 
     // Permission launcher for RECORD_AUDIO
     val recordAudioPermissionLauncher = rememberLauncherForActivityResult(
@@ -185,42 +203,127 @@ fun InputScreen(
                 }
             }
 
-            // STT Listening Button (Big & prominent)
-            Button(
-                onClick = {
-                    if (isListening) {
-                        viewModel.stopListening()
-                    } else {
-                        val permissionCheck = ContextCompat.checkSelfPermission(
-                            context,
-                            Manifest.permission.RECORD_AUDIO
-                        )
-                        if (permissionCheck == PackageManager.PERMISSION_GRANTED) {
-                            viewModel.startListening()
-                        } else {
-                            recordAudioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                        }
-                    }
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(54.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (isListening) Color(0xFFC62828) else MaterialTheme.colorScheme.primary
+            // Microphone State & Volume Indicator Card
+            val hasMicPermission = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.RECORD_AUDIO
+            ) == PackageManager.PERMISSION_GRANTED
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isListening) Color(0xFFE8F5E9) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                 ),
                 shape = RoundedCornerShape(12.dp)
             ) {
-                Icon(
-                    imageVector = if (isListening) Icons.Default.MicOff else Icons.Default.Mic,
-                    contentDescription = null,
-                    modifier = Modifier.size(26.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = if (isListening) "통화 받아쓰기 중지 (듣는 중...)" else "스피커폰 통화 받아쓰기 시작",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (hasMicPermission) "🟢 마이크 권한 승인됨 (정상)" else "🔴 마이크 권한 필요",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Bold,
+                            color = if (hasMicPermission) Color(0xFF2E7D32) else Color(0xFFC62828)
+                        )
+                        Text(
+                            text = speechStatusText,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    if (isListening) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "마이크 실시간 입력 음량:",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFF1B5E20)
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        androidx.compose.material3.LinearProgressIndicator(
+                            progress = { rmsVolume },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(8.dp)
+                                .clip(RoundedCornerShape(4.dp)),
+                            color = Color(0xFF2E7D32),
+                            trackColor = Color(0xFFC8E6C9)
+                        )
+                    }
+                }
+            }
+
+            // STT Buttons (Realtime Continuous STT & Google System Popup)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Button 1: Continuous In-App STT
+                Button(
+                    onClick = {
+                        if (isListening) {
+                            viewModel.stopListening()
+                        } else {
+                            if (hasMicPermission) {
+                                viewModel.startListening()
+                            } else {
+                                recordAudioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                            }
+                        }
+                    },
+                    modifier = Modifier
+                        .weight(1.3f)
+                        .height(54.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isListening) Color(0xFFC62828) else MaterialTheme.colorScheme.primary
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(
+                        imageVector = if (isListening) Icons.Default.MicOff else Icons.Default.Mic,
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = if (isListening) "받아쓰기 중지" else "실시간 받아쓰기",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                // Button 2: Google System Voice Dialog (100% Compatible)
+                Button(
+                    onClick = {
+                        try {
+                            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                                putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ko-KR")
+                                putExtra(RecognizerIntent.EXTRA_PROMPT, "검사할 통화/문자 내용을 말씀하세요")
+                            }
+                            speechDialogLauncher.launch(intent)
+                        } catch (e: Exception) {
+                            android.widget.Toast.makeText(context, "구글 음성 서비스를 찾을 수 없습니다: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+                        }
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(54.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF0D47A1)
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text(
+                        text = "🎙️ 구글 팝업",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
             }
 
             // Sample Scripts Quick Fill (PRD Appendix)

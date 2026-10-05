@@ -27,6 +27,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // 음성인식(SpeechRecognizer)을 위한 Activity Context 연결
+        viewModel.attachActivityContext(this)
+
         // Handle shared text intent if app launched via Share (PRD 7-2)
         handleSendIntent(intent)
 
