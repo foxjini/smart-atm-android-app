@@ -41,7 +41,7 @@
 
 - **언어 / UI**: Kotlin, Jetpack Compose Material 3
 - **최소 / 타깃 SDK**: Min SDK 26 (Android 8.0) / Target SDK 34 (Android 14)
-- **빌드 도구**: Gradle 8.6, Android Gradle Plugin 8.4.1, JDK 17
+- **빌드 도구**: Gradle 9.6.0, Android Gradle Plugin 9.4.1, Kotlin 2.2.10, JDK 17
 - **필수 권한**: `INTERNET`, `RECORD_AUDIO`
 
 ```bash

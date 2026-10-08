@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -12,7 +13,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.BufferedReader
@@ -20,7 +20,7 @@ import java.io.InputStreamReader
 import java.io.PrintWriter
 import java.net.DatagramPacket
 import java.net.DatagramSocket
-import java.net.InetAddress
+import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.net.SocketTimeoutException
@@ -32,10 +32,15 @@ class MockCallManager(
 ) {
     companion object {
         private const val TAG = "MockCallManager"
+        private const val CONNECT_TIMEOUT_MS = 5000
     }
 
     private val audioStreamer = MockAudioStreamer(context)
     private val json = Json { ignoreUnknownKeys = true }
+
+    // 제어 메시지는 단일 스레드에서 순서대로 전송 (자막 순서 뒤섞임 및 CALL_END 추월 방지)
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val sendDispatcher = Dispatchers.IO.limitedParallelism(1)
 
     private val _uiState = MutableStateFlow(MockCallUiState(localIp = NetworkUtils.getLocalIpAddress()))
     val uiState: StateFlow<MockCallUiState> = _uiState.asStateFlow()
@@ -123,16 +128,15 @@ class MockCallManager(
         clientJob = coroutineScope.launch(Dispatchers.IO) {
             try {
                 Log.d(TAG, "Connecting to host $targetIp:${NetworkUtils.PORT_CONTROL}...")
-                val socket = Socket(targetIp, NetworkUtils.PORT_CONTROL).apply {
+                val socket = Socket().apply {
+                    connect(InetSocketAddress(targetIp, NetworkUtils.PORT_CONTROL), CONNECT_TIMEOUT_MS)
                     soTimeout = 0
                 }
                 Log.d(TAG, "Connected to host $targetIp")
                 setupControlSocket(socket)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to connect to $targetIp", e)
-                withContext(Dispatchers.Main) {
-                    _uiState.update { it.copy(callStatus = CallStatus.IDLE) }
-                }
+                _uiState.update { it.copy(callStatus = CallStatus.IDLE) }
             }
         }
     }
@@ -142,7 +146,8 @@ class MockCallManager(
         val peerIp = socket.inetAddress.hostAddress ?: "unknown"
 
         socketWriter = PrintWriter(socket.getOutputStream(), true)
-        socketReader = BufferedReader(InputStreamReader(socket.getInputStream()))
+        val reader = BufferedReader(InputStreamReader(socket.getInputStream()))
+        socketReader = reader
 
         _uiState.update {
             it.copy(
@@ -154,14 +159,17 @@ class MockCallManager(
         // 제어 소켓 수신 루프
         coroutineScope.launch(Dispatchers.IO) {
             try {
-                while (isActive && controlSocket?.isConnected == true) {
-                    val line = socketReader?.readLine() ?: break
+                while (isActive && !socket.isClosed) {
+                    val line = reader.readLine() ?: break
                     handleIncomingControlMessage(line)
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Control socket read closed: ${e.message}")
             } finally {
-                handlePeerDisconnected()
+                // resetConnection()/방 재생성으로 이미 교체된 이전 소켓이면 새 연결 상태를 덮어쓰지 않음
+                if (controlSocket === socket) {
+                    handlePeerDisconnected()
+                }
             }
         }
     }
@@ -233,6 +241,8 @@ class MockCallManager(
     }
 
     private fun startCallSession(peerIp: String) {
+        // 새 통화는 이전 통화의 자막/위험도 누적 없이 시작
+        resetTranscript()
         audioStreamer.startStreaming(peerIp)
         _uiState.update {
             it.copy(
@@ -255,7 +265,8 @@ class MockCallManager(
         stopCallTimer()
         _uiState.update {
             it.copy(
-                callStatus = CallStatus.IDLE,
+                // 통화 종료 후 상대가 나가도 결과 확인(ENDED) 화면은 유지
+                callStatus = if (it.callStatus == CallStatus.ENDED) CallStatus.ENDED else CallStatus.IDLE,
                 remotePeerIp = null
             )
         }
@@ -284,15 +295,17 @@ class MockCallManager(
     }
 
     private fun addTranscriptItem(role: CallRole, text: String) {
-        if (accumulatedStringBuilder.isNotEmpty()) {
-            accumulatedStringBuilder.append(" ")
-        }
-        accumulatedStringBuilder.append(text)
-        val fullAccumulated = accumulatedStringBuilder.toString()
-
-        _uiState.update { state ->
-            val updated = state.liveTranscript + TranscriptItem(speakerRole = role, text = text)
-            state.copy(liveTranscript = updated)
+        // UI 스레드(로컬 발화)와 IO 스레드(상대 발화)에서 동시에 호출됨
+        val fullAccumulated = synchronized(accumulatedStringBuilder) {
+            if (accumulatedStringBuilder.isNotEmpty()) {
+                accumulatedStringBuilder.append(" ")
+            }
+            accumulatedStringBuilder.append(text)
+            _uiState.update { state ->
+                val updated = state.liveTranscript + TranscriptItem(speakerRole = role, text = text)
+                state.copy(liveTranscript = updated)
+            }
+            accumulatedStringBuilder.toString()
         }
 
         // 분석 트리거
@@ -338,11 +351,11 @@ class MockCallManager(
     }
 
     fun getAccumulatedTranscript(): String {
-        return accumulatedStringBuilder.toString()
+        return synchronized(accumulatedStringBuilder) { accumulatedStringBuilder.toString() }
     }
 
     fun resetTranscript() {
-        accumulatedStringBuilder.setLength(0)
+        synchronized(accumulatedStringBuilder) { accumulatedStringBuilder.setLength(0) }
         _uiState.update {
             it.copy(
                 liveTranscript = emptyList(),
@@ -404,7 +417,7 @@ class MockCallManager(
     }
 
     private fun sendControlMessage(message: ControlMessage) {
-        coroutineScope.launch(Dispatchers.IO) {
+        coroutineScope.launch(sendDispatcher) {
             try {
                 val raw = json.encodeToString(message)
                 socketWriter?.println(raw)

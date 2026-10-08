@@ -98,11 +98,27 @@ fun MockCallScreen(
     val authToken by viewModel.authToken.collectAsState()
     var targetIpInput by remember { mutableStateOf("") }
 
+    // 마이크 권한 허용 후 이어서 실행할 동작 (발신 / 수락 / 통화 중 STT 시작)
+    var pendingPermissionAction by remember { mutableStateOf<(() -> Unit)?>(null) }
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
+        val action = pendingPermissionAction
+        pendingPermissionAction = null
         if (isGranted) {
-            viewModel.mockCallManager.makeCall()
+            action?.invoke()
+        }
+    }
+    val runWithMicPermission: (() -> Unit) -> Unit = { action ->
+        val hasPermission = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
+        if (hasPermission) {
+            action()
+        } else {
+            pendingPermissionAction = action
+            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         }
     }
 
@@ -134,16 +150,10 @@ fun MockCallScreen(
     // 통화 연결 시 음성 인식(STT) 자동 활성화 및 종료 시 자동 비활성화
     LaunchedEffect(uiState.callStatus) {
         if (uiState.callStatus == CallStatus.IN_CALL) {
-            val hasPermission = ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.RECORD_AUDIO
-            ) == PackageManager.PERMISSION_GRANTED
-            if (hasPermission) {
-                if (!isListening) {
+            runWithMicPermission {
+                if (!viewModel.isListening.value) {
                     viewModel.startListening()
                 }
-            } else {
-                permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
             }
         } else if (uiState.callStatus == CallStatus.ENDED || uiState.callStatus == CallStatus.IDLE) {
             if (isListening) {
@@ -197,15 +207,7 @@ fun MockCallScreen(
                     IncomingCallView(
                         uiState = uiState,
                         onAccept = {
-                            val hasPermission = ContextCompat.checkSelfPermission(
-                                context,
-                                Manifest.permission.RECORD_AUDIO
-                            ) == PackageManager.PERMISSION_GRANTED
-                            if (hasPermission) {
-                                viewModel.mockCallManager.acceptCall()
-                            } else {
-                                permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                            }
+                            runWithMicPermission { viewModel.mockCallManager.acceptCall() }
                         },
                         onReject = { viewModel.mockCallManager.rejectCall() }
                     )
@@ -241,15 +243,7 @@ fun MockCallScreen(
                         onCreateRoom = { viewModel.mockCallManager.createRoom() },
                         onJoinRoom = { ip -> viewModel.mockCallManager.joinRoom(ip) },
                         onStartCall = {
-                            val hasPermission = ContextCompat.checkSelfPermission(
-                                context,
-                                Manifest.permission.RECORD_AUDIO
-                            ) == PackageManager.PERMISSION_GRANTED
-                            if (hasPermission) {
-                                viewModel.mockCallManager.makeCall()
-                            } else {
-                                permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                            }
+                            runWithMicPermission { viewModel.mockCallManager.makeCall() }
                         },
                         onReset = { viewModel.mockCallManager.resetConnection() }
                     )

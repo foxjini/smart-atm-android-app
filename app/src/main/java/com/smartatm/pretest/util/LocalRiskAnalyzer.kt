@@ -26,6 +26,7 @@ object LocalRiskAnalyzer {
         "계좌 동결" to 35,
         "불법 자금" to 35,
         "범죄 연루" to 35,
+        "범죄에 연루" to 35,
         "사건 연루" to 35,
         "원격제어" to 45,
         "팀뷰어" to 45,
@@ -35,7 +36,7 @@ object LocalRiskAnalyzer {
         "선입금" to 40,
         "기존 대출 상환" to 40,
         "비밀로 하라" to 35,
-        "발설하지 마라" to 35,
+        "발설하지" to 35,
         "타인에게 말하지" to 35,
         "가족에게 말하지" to 35,
         "은행원에게 말하지" to 40,
@@ -48,6 +49,7 @@ object LocalRiskAnalyzer {
         "중앙지검" to 25,
         "수사관" to 25,
         "검찰청" to 25,
+        "국세청" to 25,
         "검찰" to 20,
         "검사" to 20,
         "금융감독원" to 25,
@@ -83,6 +85,14 @@ object LocalRiskAnalyzer {
         "상품권" to 25
     )
 
+    // 단순 포함 검사로는 오탐이 나는 키워드의 정밀 패턴 ("건강검사 결과", "정기검사 받으러" 등 제외)
+    private val keywordPatterns = mapOf(
+        "검사" to Regex("(?<![가-힣])검사(?!\\s*(결과|받으|받았|하러|를\\s*받))")
+    )
+
+    private fun String.hasKeyword(kw: String): Boolean =
+        keywordPatterns[kw]?.containsMatchIn(this) ?: contains(kw, ignoreCase = true)
+
     fun analyze(text: String): LocalRiskResult {
         val trimmed = text.trim()
         if (trimmed.isBlank()) {
@@ -100,21 +110,21 @@ object LocalRiskAnalyzer {
 
         // 1. 단일 키워드 매칭
         for ((kw, weight) in highRiskKeywords) {
-            if (trimmed.contains(kw, ignoreCase = true)) {
+            if (trimmed.hasKeyword(kw)) {
                 totalScore += weight
                 detectedReasons.add("자금 탈취/비밀유지 고위험 키워드: '$kw'")
             }
         }
 
         for ((kw, weight) in institutionKeywords) {
-            if (trimmed.contains(kw, ignoreCase = true)) {
+            if (trimmed.hasKeyword(kw)) {
                 totalScore += weight
                 detectedReasons.add("기관 사칭 의심 키워드: '$kw'")
             }
         }
 
         for ((kw, weight) in financialActionKeywords) {
-            if (trimmed.contains(kw, ignoreCase = true)) {
+            if (trimmed.hasKeyword(kw)) {
                 totalScore += weight
                 detectedReasons.add("금융 거래/기기 이동 언급: '$kw'")
             }
@@ -123,14 +133,22 @@ object LocalRiskAnalyzer {
         // 2. 핵심 복합 조합 규칙 (보이스피싱 전형적 행동 패턴 -> 가산점 대폭 부여)
 
         // 규칙 A: ATM/기기 이동 + 송금/인출/이체 요구 (전형적인 대면/기기 편취 수법)
+        // "기기 충전", "은행 가서 찾아올게" 같은 일상 표현이 DANGER로 오탐되지 않도록 ATM 기기와 은행 방문을 구분
         val hasAtmDevice = trimmed.contains("ATM", ignoreCase = true) ||
                            trimmed.contains("에이티엠", ignoreCase = true) ||
                            trimmed.contains("인출기", ignoreCase = true) ||
                            trimmed.contains("자동화기기", ignoreCase = true) ||
-                           trimmed.contains("CD기", ignoreCase = true) ||
-                           trimmed.contains("기기", ignoreCase = true) ||
-                           trimmed.contains("창구", ignoreCase = true) ||
+                           trimmed.contains("CD기", ignoreCase = true)
+
+        val hasBankVisit = trimmed.contains("창구", ignoreCase = true) ||
                            trimmed.contains("은행", ignoreCase = true)
+
+        // 송금/인출을 직접 지칭하는 강한 표현 ("보내", "찾아" 등 일상 동사 제외)
+        val hasExplicitMoneyMove = trimmed.contains("송금", ignoreCase = true) ||
+                                   trimmed.contains("이체", ignoreCase = true) ||
+                                   trimmed.contains("인출", ignoreCase = true) ||
+                                   trimmed.contains("출금", ignoreCase = true) ||
+                                   trimmed.contains("입금", ignoreCase = true)
 
         val hasTransferOrWithdraw = trimmed.contains("송금", ignoreCase = true) ||
                                     trimmed.contains("이체", ignoreCase = true) ||
@@ -144,10 +162,13 @@ object LocalRiskAnalyzer {
         if (hasAtmDevice && hasTransferOrWithdraw) {
             totalScore += 50
             detectedReasons.add("🚨 [핵심 피싱 패턴] ATM/기기 이동 및 송금/인출 유도 복합 감지")
+        } else if (hasBankVisit && hasExplicitMoneyMove) {
+            totalScore += 30
+            detectedReasons.add("⚠️ 은행 방문 및 예금 인출/송금 언급")
         }
 
         // 규칙 B: 기관 사칭 + 자금 보호/안전/동결/조사 요구
-        val hasInstitution = institutionKeywords.any { trimmed.contains(it.first, ignoreCase = true) }
+        val hasInstitution = institutionKeywords.any { trimmed.hasKeyword(it.first) }
         val hasInvestigationOrSafety = trimmed.contains("안전", ignoreCase = true) ||
                                       trimmed.contains("보호", ignoreCase = true) ||
                                       trimmed.contains("동결", ignoreCase = true) ||
@@ -186,7 +207,7 @@ object LocalRiskAnalyzer {
                          trimmed.contains("발설", ignoreCase = true) ||
                          trimmed.contains("혼자", ignoreCase = true)
 
-        if (hasSecrecy && (hasTransferOrWithdraw || hasAtmDevice || hasInstitution)) {
+        if (hasSecrecy && (hasTransferOrWithdraw || hasAtmDevice || hasBankVisit || hasInstitution)) {
             totalScore += 30
             detectedReasons.add("🚨 [심리적 압박 패턴] 주변 통보 차단 및 통화 유지 강요 감지")
         }

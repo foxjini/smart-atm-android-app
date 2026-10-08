@@ -37,6 +37,8 @@ class MockAudioStreamer(private val context: Context) {
     private var audioRecord: AudioRecord? = null
     private var audioTrack: AudioTrack? = null
 
+    private val isRecordingPaused = AtomicBoolean(false)
+
     @SuppressLint("MissingPermission")
     fun startStreaming(remoteIp: String) {
         if (isRunning.getAndSet(true)) {
@@ -71,9 +73,9 @@ class MockAudioStreamer(private val context: Context) {
             audioTrack?.play()
 
             // 2. AudioRecord (송신) 설정
+            // 이전 통화에서 SpeechRecognizer용으로 일시정지된 상태가 남아 있으면 송신 스레드가 영원히 대기하므로 초기화
+            isRecordingPaused.set(false)
             createAndStartAudioRecord()
-
-            // 3. 소켓 초기화 (reuseAddress를 bind 전에 반드시 설정)
 
             // 3. 소켓 초기화 (reuseAddress를 bind 전에 반드시 설정)
             receiveSocket = DatagramSocket(null).apply {
@@ -170,6 +172,7 @@ class MockAudioStreamer(private val context: Context) {
                 // Ignore
             }
             audioRecord = null
+            isRecordingPaused.set(false)
 
             try {
                 audioTrack?.stop()
@@ -185,8 +188,6 @@ class MockAudioStreamer(private val context: Context) {
             Log.e(TAG, "Error while stopping streamer", e)
         }
     }
-
-    private val isRecordingPaused = AtomicBoolean(false)
 
     @Synchronized
     private fun createAndStartAudioRecord() {

@@ -119,6 +119,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         speechManager?.updateContext(activityContext)
     }
 
+    /** Activity 파괴 시 호출: ViewModel이 파괴된 Activity를 붙잡아 누수되지 않도록 Application Context로 복귀 */
+    fun detachActivityContext() {
+        speechManager?.updateContext(getApplication())
+    }
+
     private fun initSpeechManager() {
         speechManager = SpeechManager(
             context = getApplication(),
@@ -300,27 +305,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val token = _authToken.value
             if (token.isBlank()) {
                 // 로그인하지 않은 오프라인 환경: 온디바이스 지능형 분석 즉시 수행
-                val localResult = LocalRiskAnalyzer.analyze(message)
-                val fakeSessionId = "local-${System.currentTimeMillis()}"
-                val response = AnalysisResponse(
-                    sessionId = fakeSessionId,
-                    riskScore = localResult.riskScore,
-                    riskLevel = localResult.riskLevel,
-                    summary = localResult.summary,
-                    reasons = localResult.reasons,
-                    atmAction = if (localResult.riskLevel == "DANGER") "BLOCK" else if (localResult.riskLevel == "CAUTION") "VERIFY" else "ALLOW"
-                )
-                _analysisResult.value = response
-
-                if (localResult.riskLevel != "SAFE") {
-                    val qrPayload = "{\"session_id\": \"$fakeSessionId\"}"
-                    val bitmap = withContext(Dispatchers.Default) {
-                        QrCodeGenerator.generateQrBitmap(qrPayload, 800)
-                    }
-                    _qrBitmap.value = bitmap
-                } else {
-                    _qrBitmap.value = null
-                }
+                applyLocalAnalysis(message, "local")
                 _isLoading.value = false
                 onSuccess?.invoke()
                 return@launch
@@ -351,48 +336,44 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 } else {
                     // 서버 실패 시 로컬 온디바이스 분석으로 graceful fallback
                     Log.w(TAG, "Backend analysis failed (HTTP ${response.code()}), falling back to local analysis")
-                    val localResult = LocalRiskAnalyzer.analyze(message)
-                    val fakeSessionId = "local-${System.currentTimeMillis()}"
-                    _analysisResult.value = AnalysisResponse(
-                        sessionId = fakeSessionId,
-                        riskScore = localResult.riskScore,
-                        riskLevel = localResult.riskLevel,
-                        summary = localResult.summary,
-                        reasons = localResult.reasons,
-                        atmAction = if (localResult.riskLevel == "DANGER") "BLOCK" else if (localResult.riskLevel == "CAUTION") "VERIFY" else "ALLOW"
-                    )
-                    if (localResult.riskLevel != "SAFE") {
-                        val qrPayload = "{\"session_id\": \"$fakeSessionId\"}"
-                        val bitmap = withContext(Dispatchers.Default) {
-                            QrCodeGenerator.generateQrBitmap(qrPayload, 800)
-                        }
-                        _qrBitmap.value = bitmap
-                    }
+                    applyLocalAnalysis(message, "local")
                     onSuccess?.invoke()
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Analysis network failed, falling back to local analysis", e)
-                val localResult = LocalRiskAnalyzer.analyze(message)
-                val fakeSessionId = "local-${System.currentTimeMillis()}"
-                _analysisResult.value = AnalysisResponse(
-                    sessionId = fakeSessionId,
-                    riskScore = localResult.riskScore,
-                    riskLevel = localResult.riskLevel,
-                    summary = localResult.summary,
-                    reasons = localResult.reasons,
-                    atmAction = if (localResult.riskLevel == "DANGER") "BLOCK" else if (localResult.riskLevel == "CAUTION") "VERIFY" else "ALLOW"
-                )
-                if (localResult.riskLevel != "SAFE") {
-                    val qrPayload = "{\"session_id\": \"$fakeSessionId\"}"
-                    val bitmap = withContext(Dispatchers.Default) {
-                        QrCodeGenerator.generateQrBitmap(qrPayload, 800)
-                    }
-                    _qrBitmap.value = bitmap
-                }
+                applyLocalAnalysis(message, "local")
                 onSuccess?.invoke()
             } finally {
                 _isLoading.value = false
             }
+        }
+    }
+
+    /**
+     * 온디바이스 분석 결과를 반영하고, 위험(CAUTION/DANGER)일 때만 QR 생성 (SAFE면 이전 QR 제거)
+     */
+    private suspend fun applyLocalAnalysis(message: String, sessionPrefix: String) {
+        val localResult = LocalRiskAnalyzer.analyze(message)
+        val fakeSessionId = "$sessionPrefix-${System.currentTimeMillis()}"
+        _analysisResult.value = AnalysisResponse(
+            sessionId = fakeSessionId,
+            riskScore = localResult.riskScore,
+            riskLevel = localResult.riskLevel,
+            summary = localResult.summary,
+            reasons = localResult.reasons,
+            atmAction = when (localResult.riskLevel) {
+                "DANGER" -> "BLOCK"
+                "CAUTION" -> "VERIFY"
+                else -> "ALLOW"
+            }
+        )
+        _qrBitmap.value = if (localResult.riskLevel != "SAFE") {
+            val qrPayload = "{\"session_id\": \"$fakeSessionId\"}"
+            withContext(Dispatchers.Default) {
+                QrCodeGenerator.generateQrBitmap(qrPayload, 800)
+            }
+        } else {
+            null
         }
     }
 
@@ -486,29 +467,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val token = _authToken.value
         if (token.isBlank()) {
             // 로그인하지 않은 경우에도 통화 종료 후 결과 화면 및 ATM 차단 QR 정상 생성
-            val localResult = LocalRiskAnalyzer.analyze(fullTranscript)
-            val fakeSessionId = "mock-call-${System.currentTimeMillis()}"
-            val response = AnalysisResponse(
-                sessionId = fakeSessionId,
-                riskScore = localResult.riskScore,
-                riskLevel = localResult.riskLevel,
-                summary = localResult.summary,
-                reasons = localResult.reasons,
-                atmAction = if (localResult.riskLevel == "DANGER") "BLOCK" else if (localResult.riskLevel == "CAUTION") "VERIFY" else "ALLOW"
-            )
-            _analysisResult.value = response
-
-            if (localResult.riskLevel != "SAFE") {
-                val qrPayload = "{\"session_id\": \"$fakeSessionId\"}"
-                viewModelScope.launch(Dispatchers.Default) {
-                    val bitmap = QrCodeGenerator.generateQrBitmap(qrPayload, 800)
-                    _qrBitmap.value = bitmap
-                    withContext(Dispatchers.Main) {
-                        onSuccess.invoke()
-                    }
-                }
-            } else {
-                _qrBitmap.value = null
+            viewModelScope.launch {
+                applyLocalAnalysis(fullTranscript, "mock-call")
                 onSuccess.invoke()
             }
         } else {
