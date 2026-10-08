@@ -39,6 +39,10 @@ class MockCallManager(
 
     private val audioStreamer = MockAudioStreamer(context)
     private val tonePlayer = CallTonePlayer(context)
+    private val multicastLock = WifiMulticastLock(context)
+
+    // 이 기기의 비콘을 식별하는 ID (자기가 만든 방이 탐색 목록에 뜨지 않도록)
+    private val instanceId = java.util.UUID.randomUUID().toString()
     private val json = Json { ignoreUnknownKeys = true }
 
     // 제어 메시지는 단일 스레드에서 순서대로 전송 (자막 순서 뒤섞임 및 CALL_END 추월 방지)
@@ -461,19 +465,25 @@ class MockCallManager(
             var socket: DatagramSocket? = null
             try {
                 socket = DatagramSocket().apply { broadcast = true }
-                val broadcastAddr = NetworkUtils.getBroadcastAddress()
 
                 while (isActive) {
                     val beacon = ControlMessage(
                         type = MessageType.DISCOVERY_BEACON,
                         senderRole = _uiState.value.currentRole.name,
                         senderIp = _uiState.value.localIp,
-                        roomId = roomId
+                        roomId = roomId,
+                        payload = instanceId
                     )
                     val bytes = json.encodeToString(beacon).toByteArray()
-                    val packet = DatagramPacket(bytes, bytes.size, broadcastAddr, NetworkUtils.PORT_DISCOVERY)
-                    socket.send(packet)
-                    delay(1500)
+                    // Wi-Fi 서브넷 브로드캐스트 + 255.255.255.255 모두로 송신 (주소별 실패는 무시)
+                    for (address in NetworkUtils.getBroadcastAddresses()) {
+                        try {
+                            socket.send(DatagramPacket(bytes, bytes.size, address, NetworkUtils.PORT_DISCOVERY))
+                        } catch (e: Exception) {
+                            Log.d(TAG, "Beacon send to $address failed: ${e.message}")
+                        }
+                    }
+                    delay(1000)
                 }
             } catch (e: Exception) {
                 // Ignore cancel
@@ -493,41 +503,57 @@ class MockCallManager(
         beaconListenJob?.cancel()
         beaconListenJob = coroutineScope.launch(Dispatchers.IO) {
             var socket: DatagramSocket? = null
+            // 다른 기기의 브로드캐스트 비콘을 Wi-Fi 드라이버가 버리지 않도록 잠금 유지
+            multicastLock.acquire()
             try {
-                socket = DatagramSocket(NetworkUtils.PORT_DISCOVERY).apply {
-                    broadcast = true
-                    reuseAddress = true
-                    soTimeout = 2000
+                // 포트가 잠시 점유되어 있어도 탐색이 영구 중단되지 않도록 바인딩 재시도
+                while (isActive && socket == null) {
+                    socket = try {
+                        DatagramSocket(null).apply {
+                            reuseAddress = true
+                            broadcast = true
+                            bind(InetSocketAddress(NetworkUtils.PORT_DISCOVERY))
+                            soTimeout = 2000
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Discovery socket bind failed, retrying: ${e.message}")
+                        delay(2000)
+                        null
+                    }
                 }
-                val buffer = ByteArray(1024)
+                val buffer = ByteArray(2048)
 
                 while (isActive) {
                     try {
                         val packet = DatagramPacket(buffer, buffer.size)
-                        socket.receive(packet)
+                        socket!!.receive(packet)
                         val raw = String(packet.data, 0, packet.length)
                         val beacon = json.decodeFromString<ControlMessage>(raw)
 
-                        if (beacon.type == MessageType.DISCOVERY_BEACON && beacon.roomId != null) {
+                        if (beacon.type == MessageType.DISCOVERY_BEACON && beacon.roomId != null &&
+                            beacon.payload != instanceId
+                        ) {
                             val role = if (beacon.senderRole == CallRole.ATTACKER.name) CallRole.ATTACKER else CallRole.VICTIM
                             val room = DiscoveredRoom(
                                 roomId = beacon.roomId,
-                                hostIp = beacon.senderIp,
+                                // 비콘에 적힌 IP(127.0.0.1 등으로 잘못 잡힐 수 있음) 대신 실제 송신 주소 사용
+                                hostIp = packet.address?.hostAddress ?: beacon.senderIp,
                                 hostRole = role
                             )
                             updateDiscoveredRoom(room)
                         }
                     } catch (e: SocketTimeoutException) {
                         // Timeout normal
-                        cleanupExpiredRooms()
                     } catch (e: Exception) {
                         // Ignore
                     }
+                    cleanupExpiredRooms()
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Discovery listener closed: ${e.message}")
             } finally {
                 socket?.close()
+                multicastLock.release()
             }
         }
     }

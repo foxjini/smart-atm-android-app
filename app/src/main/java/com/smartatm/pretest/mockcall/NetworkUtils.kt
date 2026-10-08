@@ -19,7 +19,8 @@ object NetworkUtils {
             // wlan0 (Wi-Fi) 우선 탐색
             for (intf in interfaces) {
                 if (intf.isLoopback || !intf.isUp) continue
-                val isWifi = intf.name.contains("wlan", ignoreCase = true)
+                // wlan0: 일반 Wi-Fi, swlan0/ap0/softap0: 휴대폰 핫스팟(테더링) 인터페이스
+                val isWifi = isWifiInterfaceName(intf.name)
                 val addrs = Collections.list(intf.inetAddresses)
                 for (addr in addrs) {
                     if (!addr.isLoopbackAddress && addr is Inet4Address) {
@@ -50,10 +51,34 @@ object NetworkUtils {
         return "127.0.0.1"
     }
 
+    private fun isWifiInterfaceName(name: String): Boolean {
+        val n = name.lowercase()
+        return n.contains("wlan") || n.startsWith("ap") || n.startsWith("softap")
+    }
+
     /**
-     * 브로드캐스트 주소 (255.255.255.255)
+     * 방 탐색 비콘을 보낼 브로드캐스트 주소 목록.
+     * 255.255.255.255 는 모바일 데이터가 켜져 있거나 인터넷 없는 Wi-Fi일 때 Wi-Fi가 아닌 경로로
+     * 나가 버릴 수 있으므로, Wi-Fi 서브넷 브로드캐스트(예: 192.168.0.255)를 먼저 보낸다.
      */
-    fun getBroadcastAddress(): InetAddress {
-        return InetAddress.getByName("255.255.255.255")
+    fun getBroadcastAddresses(): List<InetAddress> {
+        val result = LinkedHashSet<InetAddress>()
+        try {
+            val interfaces = Collections.list(NetworkInterface.getNetworkInterfaces())
+                .filter { !it.isLoopback && it.isUp }
+                .sortedByDescending { isWifiInterfaceName(it.name) }
+            for (intf in interfaces) {
+                for (ifAddr in intf.interfaceAddresses) {
+                    val broadcast = ifAddr.broadcast ?: continue
+                    if (ifAddr.address is Inet4Address && ifAddr.address.isSiteLocalAddress) {
+                        result += broadcast
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        result += InetAddress.getByName("255.255.255.255")
+        return result.toList()
     }
 }
