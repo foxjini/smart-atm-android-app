@@ -24,6 +24,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
@@ -64,7 +65,7 @@ fun InputScreen(
     viewModel: MainViewModel,
     onNavigateToSettings: () -> Unit,
     onNavigateToResult: () -> Unit,
-    onNavigateToMockCall: () -> Unit
+    onNavigateBack: () -> Unit
 ) {
     val context = LocalContext.current
     val inputText by viewModel.inputText.collectAsState()
@@ -101,7 +102,12 @@ fun InputScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Text("보이스피싱 사전 검사", fontWeight = FontWeight.Bold)
+                    Text("직접 입력 검사", fontWeight = FontWeight.Bold)
+                },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로가기")
+                    }
                 },
                 actions = {
                     IconButton(onClick = onNavigateToSettings) {
@@ -119,29 +125,6 @@ fun InputScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // PRD v2.0 13-2: 입력 방법 탭 [문자 검사] [Mock 통화]
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Button(
-                    onClick = { /* Current Screen */ },
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Text("📝 문자 검사", fontWeight = FontWeight.Bold)
-                }
-
-                OutlinedButton(
-                    onClick = onNavigateToMockCall,
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Text("📞 Mock 통화", fontWeight = FontWeight.Bold)
-                }
-            }
-
             // Text Input Card
             Card(
                 modifier = Modifier.fillMaxWidth(),

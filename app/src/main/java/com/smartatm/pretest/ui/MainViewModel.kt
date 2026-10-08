@@ -111,6 +111,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _speechStatusText = MutableStateFlow("대기 중")
     val speechStatusText: StateFlow<String> = _speechStatusText.asStateFlow()
 
+    // 문자 검사 목록: 메시지 id → 검사 결과 등급 (SAFE/CAUTION/DANGER)
+    private val _smsCheckResults = MutableStateFlow<Map<Int, String>>(emptyMap())
+    val smsCheckResults: StateFlow<Map<Int, String>> = _smsCheckResults.asStateFlow()
+
+    // 다른 앱에서 [공유]로 문자를 받으면 true → 화면이 직접 입력 검사 화면으로 이동 후 소비
+    private val _hasPendingSharedText = MutableStateFlow(false)
+    val hasPendingSharedText: StateFlow<Boolean> = _hasPendingSharedText.asStateFlow()
+
     init {
         initSpeechManager()
     }
@@ -234,6 +242,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _isLoading.value = false
             }
         }
+    }
+
+    fun onSharedText(text: String) {
+        setInputText(text)
+        _hasPendingSharedText.value = true
+    }
+
+    fun consumeSharedText() {
+        _hasPendingSharedText.value = false
+    }
+
+    /** 문자 목록에서 선택한 메시지를 검사하고 목록에 표시할 결과 등급을 기록 */
+    fun analyzeSms(messageId: Int, body: String, onSuccess: () -> Unit) {
+        setInputText(body)
+        analyze(onSuccess = {
+            _analysisResult.value?.riskLevel?.let { level ->
+                _smsCheckResults.value = _smsCheckResults.value + (messageId to level)
+            }
+            onSuccess()
+        })
     }
 
     fun setInputText(text: String) {

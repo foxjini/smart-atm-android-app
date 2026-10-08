@@ -90,6 +90,12 @@ object LocalRiskAnalyzer {
         "검사" to Regex("(?<![가-힣])검사(?!\\s*(결과|받으|받았|하러|를\\s*받))")
     )
 
+    private val urlPattern = Regex("https?://|www\\.|bit\\.ly/|han\\.gl/|me2\\.kr/", RegexOption.IGNORE_CASE)
+
+    private val smishingLures = listOf(
+        "택배", "배송", "반송", "주소", "환급", "결제", "승인", "미납", "과태료", "청첩장", "부고", "쿠폰", "당첨"
+    )
+
     private fun String.hasKeyword(kw: String): Boolean =
         keywordPatterns[kw]?.containsMatchIn(this) ?: contains(kw, ignoreCase = true)
 
@@ -210,6 +216,17 @@ object LocalRiskAnalyzer {
         if (hasSecrecy && (hasTransferOrWithdraw || hasAtmDevice || hasBankVisit || hasInstitution)) {
             totalScore += 30
             detectedReasons.add("🚨 [심리적 압박 패턴] 주변 통보 차단 및 통화 유지 강요 감지")
+        }
+
+        // 규칙 E: 문자 속 출처 불명 링크(URL) + 택배/환급/결제 등 클릭 유도 문구 (스미싱)
+        val hasUrl = urlPattern.containsMatchIn(trimmed)
+        if (hasUrl) {
+            totalScore += 30
+            detectedReasons.add("출처 불명 인터넷 주소(URL) 포함")
+            if (smishingLures.any { trimmed.contains(it) }) {
+                totalScore += 30
+                detectedReasons.add("🚨 [스미싱 패턴] 택배·환급·결제 등을 빙자한 링크 클릭 유도 감지")
+            }
         }
 
         val clampedScore = totalScore.coerceIn(0, 100)

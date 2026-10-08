@@ -58,6 +58,19 @@ class LocalRiskAnalyzerTest {
     }
 
     @Test
+    fun deliverySmishingLinkIsDanger() {
+        val result = LocalRiskAnalyzer.analyze("[택배] 주소지 불명으로 반송 예정입니다. 주소 확인: http://abc-track.xyz/a8")
+        assertEquals("DANGER", result.riskLevel)
+        assertTrue(result.reasons.any { it.contains("스미싱") })
+    }
+
+    @Test
+    fun linkAloneIsCaution() {
+        val result = LocalRiskAnalyzer.analyze("오늘 본 영상 링크야 https://example.com/v/123")
+        assertEquals("CAUTION", result.riskLevel)
+    }
+
+    @Test
     fun blankTextIsSafe() {
         val result = LocalRiskAnalyzer.analyze("   ")
         assertEquals("SAFE", result.riskLevel)
