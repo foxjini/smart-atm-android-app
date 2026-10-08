@@ -39,6 +39,10 @@ class MockAudioStreamer(private val context: Context) {
 
     private val isRecordingPaused = AtomicBoolean(false)
 
+    // 사용자가 원하는 스피커폰 상태 (STT 일시정지 중에는 통신 라우팅을 해제했다가 재개 시 복원)
+    @Volatile
+    private var speakerRequested = true
+
     @SuppressLint("MissingPermission")
     fun startStreaming(remoteIp: String) {
         if (isRunning.getAndSet(true)) {
@@ -141,7 +145,8 @@ class MockAudioStreamer(private val context: Context) {
                 }
             }, "MockAudio-Playback").apply { start() }
 
-            setSpeakerphoneOn(true)
+            speakerRequested = true
+            applyCommunicationRoute(true)
             Log.d(TAG, "Audio streaming started to $remoteIp:${NetworkUtils.PORT_AUDIO}")
 
         } catch (e: Exception) {
@@ -182,7 +187,7 @@ class MockAudioStreamer(private val context: Context) {
             }
             audioTrack = null
 
-            setSpeakerphoneOn(false)
+            applyCommunicationRoute(false)
             Log.d(TAG, "Audio streaming stopped")
         } catch (e: Exception) {
             Log.e(TAG, "Error while stopping streamer", e)
@@ -246,6 +251,9 @@ class MockAudioStreamer(private val context: Context) {
             } catch (e: Exception) {
                 Log.w(TAG, "Error releasing AudioRecord", e)
             }
+            // 통신 모드(MODE_IN_COMMUNICATION)/통신 장치가 이 앱에 잡혀 있으면 Android 동시 녹음 정책상
+            // 다른 프로세스에서 도는 SpeechRecognizer(Google 앱)의 마이크 입력이 무음 처리될 수 있으므로 해제
+            applyCommunicationRoute(false)
         }
     }
 
@@ -253,6 +261,7 @@ class MockAudioStreamer(private val context: Context) {
         if (isRecordingPaused.getAndSet(false)) {
             try {
                 if (isRunning.get()) {
+                    applyCommunicationRoute(speakerRequested)
                     createAndStartAudioRecord()
                     Log.d(TAG, "AudioRecord recreated and resumed after SpeechRecognizer")
                 }
@@ -267,6 +276,14 @@ class MockAudioStreamer(private val context: Context) {
     }
 
     fun setSpeakerphoneOn(speakerOn: Boolean) {
+        speakerRequested = speakerOn
+        // STT가 마이크를 쓰는 동안에는 라우팅을 건드리지 않고, 재개 시 반영
+        if (!isRecordingPaused.get()) {
+            applyCommunicationRoute(speakerOn)
+        }
+    }
+
+    private fun applyCommunicationRoute(speakerOn: Boolean) {
         try {
             val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {

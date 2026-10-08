@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.speech.RecognitionListener
+import android.speech.RecognitionService
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.util.Log
@@ -71,6 +72,9 @@ class SpeechManager(
                 SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "음성 인식기 준비 중"
                 SpeechRecognizer.ERROR_SERVER -> "음성인식 서버 오류"
                 SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "음성이 감지되지 않음 (계속 듣는 중...)"
+                10 -> "음성인식 요청이 너무 많습니다" // ERROR_TOO_MANY_REQUESTS (API 31)
+                11 -> "음성인식 서비스 연결 끊김" // ERROR_SERVER_DISCONNECTED (API 31)
+                12, 13 -> "한국어 음성인식을 지원하지 않거나 언어팩이 없습니다" // ERROR_LANGUAGE_NOT_SUPPORTED / UNAVAILABLE (API 31)
                 else -> "음성 인식 오류 ($error)"
             }
             Log.w(TAG, "onError: $errorMsg ($error)")
@@ -141,17 +145,34 @@ class SpeechManager(
             Log.w(TAG, "SpeechRecognizer is reported as NOT available on this device!")
         }
 
-        // Google 음성인식 서비스가 있으면 우선 연결 (삼성 음성인식기보다 호환성이 월등함)
-        val recognizer = try {
+        // Google 음성인식 서비스가 실제로 설치되어 있을 때만 우선 연결 (삼성 음성인식기보다 호환성이 월등함)
+        // createSpeechRecognizer()는 없는 컴포넌트를 지정해도 예외 없이 생성되고, 이후 바인딩 실패(ERROR_CLIENT)가
+        // 무한 재시도되므로 PackageManager로 존재 여부를 먼저 확인
+        val recognizer = if (isGoogleServiceInstalled()) {
+            Log.d(TAG, "Using recognition service: $GOOGLE_SERVICE_COMPONENT")
             SpeechRecognizer.createSpeechRecognizer(context, GOOGLE_SERVICE_COMPONENT)
-        } catch (e: Exception) {
-            Log.d(TAG, "Google speech service not found, falling back to default", e)
+        } else {
+            Log.d(TAG, "Google recognition service not found, using system default recognizer")
             SpeechRecognizer.createSpeechRecognizer(context)
         }
 
         recognizer.setRecognitionListener(recognitionListener)
         speechRecognizer = recognizer
         return recognizer
+    }
+
+    private fun isGoogleServiceInstalled(): Boolean {
+        return try {
+            context.packageManager
+                .queryIntentServices(Intent(RecognitionService.SERVICE_INTERFACE), 0)
+                .any {
+                    it.serviceInfo.packageName == GOOGLE_SERVICE_COMPONENT.packageName &&
+                        it.serviceInfo.name == GOOGLE_SERVICE_COMPONENT.className
+                }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to query recognition services", e)
+            false
+        }
     }
 
     private fun recreateRecognizer(): SpeechRecognizer {
