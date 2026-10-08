@@ -410,6 +410,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun analyzeMockCallRealtime(text: String) {
         val trimmed = text.trim()
         if (trimmed.isBlank()) return
+        // 공격자 모드는 통화만 수행하며 보이스피싱 위험도 분석은 피해자 기기에서만 진행
+        if (mockCallUiState.value.currentRole == CallRole.ATTACKER) return
 
         // 1. 서버 로그인 여부와 관계없이 온디바이스 로컬 규칙 분석을 즉시 적용 (0ms 지연)
         val localResult = LocalRiskAnalyzer.analyze(trimmed)

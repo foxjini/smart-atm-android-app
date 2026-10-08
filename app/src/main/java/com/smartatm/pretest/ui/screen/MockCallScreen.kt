@@ -148,14 +148,15 @@ fun MockCallScreen(
     }
 
     // 통화 연결 시 음성 인식(STT) 자동 활성화 및 종료 시 자동 비활성화
-    LaunchedEffect(uiState.callStatus) {
-        if (uiState.callStatus == CallStatus.IN_CALL) {
+    // 공격자 모드는 통화만 수행: STT를 켜지 않아 마이크가 통화 음성 송신에만 쓰임
+    LaunchedEffect(uiState.callStatus, uiState.currentRole) {
+        if (uiState.callStatus == CallStatus.IN_CALL && uiState.currentRole == CallRole.VICTIM) {
             runWithMicPermission {
                 if (!viewModel.isListening.value) {
                     viewModel.startListening()
                 }
             }
-        } else if (uiState.callStatus == CallStatus.ENDED || uiState.callStatus == CallStatus.IDLE) {
+        } else if (uiState.callStatus != CallStatus.IN_CALL || uiState.currentRole == CallRole.ATTACKER) {
             if (isListening) {
                 viewModel.stopListening()
             }
@@ -274,6 +275,8 @@ private fun InCallView(
     onSendScript: (String) -> Unit
 ) {
     val listState = rememberLazyListState()
+    // 공격자 모드: 통화 전용 (STT/위험도 분석 UI 숨김)
+    val isVictim = uiState.currentRole == CallRole.VICTIM
 
     // 새 자막이 들어올 때마다 자동 스크롤
     LaunchedEffect(uiState.liveTranscript.size) {
@@ -304,7 +307,7 @@ private fun InCallView(
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         // 음성인식/네트워크 에러 알림 카드
-        if (!errorMessage.isNullOrBlank()) {
+        if (isVictim && !errorMessage.isNullOrBlank()) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE)),
@@ -377,15 +380,21 @@ private fun InCallView(
                                 fontSize = 12.sp,
                                 color = Color.DarkGray
                             )
-                            if (uiState.currentRole == CallRole.VICTIM) {
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = if (hasAuthToken) "• 서버 AI 연동" else "• 온디바이스 실시간 분석",
-                                    fontSize = 11.sp,
-                                    color = if (hasAuthToken) Color(0xFF1565C0) else Color(0xFF2E7D32),
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = when {
+                                    !isVictim -> "• 통화 전용 모드"
+                                    hasAuthToken -> "• 서버 AI 연동"
+                                    else -> "• 온디바이스 실시간 분석"
+                                },
+                                fontSize = 11.sp,
+                                color = when {
+                                    !isVictim -> Color.Gray
+                                    hasAuthToken -> Color(0xFF1565C0)
+                                    else -> Color(0xFF2E7D32)
+                                },
+                                fontWeight = FontWeight.Bold
+                            )
                         }
                     }
                 }
@@ -403,7 +412,7 @@ private fun InCallView(
         }
 
         // 실시간 위험도 분석 카드 (피해자 화면의 핵심!)
-        Card(
+        if (isVictim) Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = riskBgColor),
             shape = RoundedCornerShape(12.dp)
@@ -480,11 +489,11 @@ private fun InCallView(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "실시간 음성 자막 (STT 누적 대화):",
+                        text = if (isVictim) "실시간 음성 자막 (STT 누적 대화):" else "통화 자막 (전송한 대본 / 상대방 자막):",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold
                     )
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (isVictim) Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
                                 .size(8.dp)
@@ -557,7 +566,9 @@ private fun InCallView(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = if (isListening) {
+                            text = if (!isVictim) {
+                                "📞 공격자 모드: 음성 통화만 진행됩니다.\n(음성 인식·보이스피싱 분석은 피해자 기기에서만 동작)\n소음이 많을 때는 아래 대본 칩으로 자막을 보낼 수 있습니다."
+                            } else if (isListening) {
                                 "🎙️ 마이크로 말씀하시면 실시간 텍스트로 변환 및 분석됩니다.\n소음이 많거나 테스트 시 아래 대본 칩을 전송할 수 있습니다."
                             } else {
                                 "음성 인식이 일시정지되었습니다.\n하단 귀 모양/마이크 버튼을 눌러 다시 활성화하세요."
@@ -704,8 +715,8 @@ private fun InCallView(
                 )
             }
 
-            // 음성인식(STT) 토글
-            IconButton(
+            // 음성인식(STT) 토글 (피해자 전용)
+            if (isVictim) IconButton(
                 onClick = onToggleListening,
                 modifier = Modifier
                     .size(54.dp)
@@ -869,8 +880,17 @@ private fun CallEndedView(
             color = Color.DarkGray
         )
 
-        // 최종 위험도 판정 카드
-        Card(
+        if (uiState.currentRole == CallRole.ATTACKER) {
+            Text(
+                text = "공격자 모드에서는 보이스피싱 위험도 분석을 하지 않습니다.\n분석 결과와 ATM 차단 QR은 피해자 기기에서 확인하세요.",
+                fontSize = 14.sp,
+                color = Color.Gray,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+        }
+
+        // 최종 위험도 판정 카드 (피해자 전용)
+        if (uiState.currentRole == CallRole.VICTIM) Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
                 containerColor = when (uiState.realTimeRiskLevel) {
@@ -908,8 +928,8 @@ private fun CallEndedView(
             }
         }
 
-        // 위험일 경우 ATM 출금 차단 QR 생성 버튼
-        if (uiState.realTimeRiskLevel != "SAFE") {
+        // 위험일 경우 ATM 출금 차단 QR 생성 버튼 (피해자 전용)
+        if (uiState.currentRole == CallRole.VICTIM && uiState.realTimeRiskLevel != "SAFE") {
             Button(
                 onClick = onConfirmResult,
                 modifier = Modifier

@@ -10,6 +10,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -36,6 +38,7 @@ class MockCallManager(
     }
 
     private val audioStreamer = MockAudioStreamer(context)
+    private val tonePlayer = CallTonePlayer(context)
     private val json = Json { ignoreUnknownKeys = true }
 
     // 제어 메시지는 단일 스레드에서 순서대로 전송 (자막 순서 뒤섞임 및 CALL_END 추월 방지)
@@ -61,8 +64,16 @@ class MockCallManager(
     // Accumulated conversation for analysis
     private val accumulatedStringBuilder = java.lang.StringBuilder()
 
+    private var toneJob: Job? = null
+
     init {
         startDiscoveryListener()
+        // 발신 중 연결음 / 수신 중 벨소리를 통화 상태에 맞춰 자동 전환
+        toneJob = coroutineScope.launch {
+            uiState.map { it.callStatus }
+                .distinctUntilChanged()
+                .collect { tonePlayer.onCallStatusChanged(it) }
+        }
     }
 
     fun setRole(role: CallRole) {
@@ -578,5 +589,8 @@ class MockCallManager(
         resetConnection()
         beaconListenJob?.cancel()
         beaconListenJob = null
+        toneJob?.cancel()
+        toneJob = null
+        tonePlayer.stopAll()
     }
 }
