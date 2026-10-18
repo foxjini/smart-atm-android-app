@@ -197,8 +197,13 @@ fun ResultScreen(
                         Text(text = resultNotice ?: "", fontSize = 16.sp, color = Color.Black)
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "ATM은 서버에 등록된 검사 결과만 막을 수 있어 QR을 만들지 않았습니다. " +
-                                "서버 연결과 로그인을 확인한 뒤 다시 검사해 주세요.",
+                            // SAFE는 원래 QR이 없으니 'QR을 만들지 않았다'는 말은 위험·주의일 때만 한다
+                            text = if (riskLevel != "SAFE") {
+                                "ATM은 서버에 등록된 검사 결과만 막을 수 있어 QR을 만들지 않았습니다. " +
+                                    "서버 연결과 로그인을 확인한 뒤 다시 검사해 주세요."
+                            } else {
+                                "서버 연결과 로그인을 확인한 뒤 다시 검사해 주세요."
+                            },
                             fontSize = 15.sp,
                             color = Color.DarkGray
                         )
