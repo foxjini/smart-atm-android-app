@@ -485,7 +485,7 @@ Content-Type: application/json
 ## 10-1. 공통
 
 - 모든 성공 응답은 `{"data": ...}` 로 감싸여 온다
-- 모든 실패 응답은 `{"detail": {"code": "...", "message": "..."}}` 이다
+- 모든 실패 응답은 `{"error": {"code": "...", "message": "..."}}` 이다 (FastAPI 기본값인 `detail`이 아니다 — 서버를 띄워 확인)
 - 사용자용 API는 `Authorization: Bearer <토큰>` 헤더가 필요하다
 - 토큰 유효 시간은 12시간이다
 
@@ -911,37 +911,23 @@ A 또는 B
 
 # 19. 분석 요청 빈도
 
-통화 중 매 음절마다 서버에 요청하지 않는다.
+> **통화 중에는 서버에 분석을 요청하지 않는다.** (2026-10-18 실제 서버·ATM 연동 점검에서 바로잡음)
+>
+> `POST /api/v1/analysis`는 요청 한 번마다 분석 결과와 ATM 세션(`VP-…`)을 **새로 저장**한다.
+> CAUTION·DANGER 세션은 저장되자마자 콜센터 '확인 필요' 목록에 올라간다. 문장마다 보냈더니
+> 통화 한 번에 **같은 통화가 5줄** 생겼고, QR에는 그중 마지막 하나만 들어갔다.
 
 권장:
 
 ```text
-STT 부분 결과
-      ↓
-일정 길이 이상 누적
-      ↓
-이전 분석 내용과 달라진 경우
-      ↓
-/api/v1/analysis
+[통화 중]   STT 문장 결과 → 누적 텍스트 → 앱 규칙 엔진(LocalRiskAnalyzer) → 실시간 위험 경고
+[통화 종료] 누적 텍스트 → POST /api/v1/analysis (한 번) → session_id → QR
 ```
 
-예:
-
-```text
-"서울중앙지검 수사관입니다"
-          ↓
-분석 요청
-
-"계좌가 범죄에 연루되어 있습니다"
-          ↓
-분석 요청
-
-"안전계좌로 이체해 주세요"
-          ↓
-분석 요청
-```
-
-실제 호출 빈도는 백엔드 응답 시간과 STT 구현 결과를 보고 조정한다.
+앱 규칙 엔진은 **서버(`backend/analysis/`)와 키워드·가중치·경계값이 똑같다** — 그래서 통화 중
+경고와 통화 종료 후 서버 판정이 일치한다. 이것은 단위테스트 `LocalRiskAnalyzerParityTest`가
+서버가 계산한 문장 목록(`app/src/test/resources/server_judgement_cases.json`)으로 확인한다.
+서버 키워드를 바꾸면 `tools/make_judgement_cases.py`로 목록을 다시 만들고 앱 규칙도 맞춘다.
 
 ---
 
