@@ -97,7 +97,7 @@ fun SettingsScreen(
                     OutlinedTextField(
                         value = serverUrl,
                         onValueChange = { viewModel.updateServerUrl(it) },
-                        label = { Text("서버 URL (예: http://192.168.0.x:8000)") },
+                        label = { Text("서버 URL (예: http://192.168.137.1:8000)") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri)

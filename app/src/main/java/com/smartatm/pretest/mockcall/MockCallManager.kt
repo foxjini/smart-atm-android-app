@@ -35,6 +35,8 @@ class MockCallManager(
     companion object {
         private const val TAG = "MockCallManager"
         private const val CONNECT_TIMEOUT_MS = 5000
+        private const val HEARTBEAT_INTERVAL_MS = 2000L   // 연결 유지 PING 주기
+        private const val PEER_SILENCE_TIMEOUT_MS = 10000L // 이 시간 동안 아무 메시지도 없으면 연결 끊김으로 판단
     }
 
     private val audioStreamer = MockAudioStreamer(context)
@@ -57,6 +59,9 @@ class MockCallManager(
     private var controlSocket: Socket? = null
     private var socketWriter: PrintWriter? = null
     private var socketReader: BufferedReader? = null
+
+    @Volatile
+    private var lastPeerActivityAt = 0L
 
     // Background Jobs
     private var serverJob: Job? = null
@@ -119,19 +124,32 @@ class MockCallManager(
 
         serverJob = coroutineScope.launch(Dispatchers.IO) {
             try {
-                serverSocket = ServerSocket(NetworkUtils.PORT_CONTROL).apply {
+                val server = ServerSocket().apply {
                     reuseAddress = true
+                    bind(InetSocketAddress(NetworkUtils.PORT_CONTROL))
                 }
+                serverSocket = server
                 Log.d(TAG, "Server socket opened on port ${NetworkUtils.PORT_CONTROL}")
 
                 // 브로드캐스트 비콘 시작 (상대방 자동 탐색용)
                 startBeaconSender(id)
 
-                val client = serverSocket!!.accept()
-                Log.d(TAG, "Client connected: ${client.inetAddress.hostAddress}")
-                stopBeaconSender()
-
-                setupControlSocket(client)
+                // 상대가 나가도 방을 유지하고 다음 참여자를 계속 받음
+                // (예전에는 첫 접속만 받고 이후 접속은 대기열에 방치 → 참여자만 '연결됨'으로 보이는 불일치 발생)
+                while (isActive && !server.isClosed) {
+                    val client = server.accept()
+                    val busy = controlSocket?.isClosed == false ||
+                        _uiState.value.callStatus == CallStatus.ENDED
+                    if (busy) {
+                        // 이미 상대가 있거나 통화 결과 화면이면 새 접속은 즉시 끊어 상대가 바로 실패를 알게 함
+                        Log.d(TAG, "Rejecting extra client: ${client.inetAddress.hostAddress}")
+                        client.close()
+                        continue
+                    }
+                    Log.d(TAG, "Client connected: ${client.inetAddress.hostAddress}")
+                    stopBeaconSender()
+                    setupControlSocket(client)
+                }
             } catch (e: Exception) {
                 if (isActive) {
                     Log.e(TAG, "Error in createRoom: ${e.message}")
@@ -185,11 +203,14 @@ class MockCallManager(
             )
         }
 
+        lastPeerActivityAt = System.currentTimeMillis()
+
         // 제어 소켓 수신 루프
-        coroutineScope.launch(Dispatchers.IO) {
+        val readerJob = coroutineScope.launch(Dispatchers.IO) {
             try {
                 while (isActive && !socket.isClosed) {
                     val line = reader.readLine() ?: break
+                    lastPeerActivityAt = System.currentTimeMillis()
                     handleIncomingControlMessage(line)
                 }
             } catch (e: Exception) {
@@ -198,6 +219,28 @@ class MockCallManager(
                 // resetConnection()/방 재생성으로 이미 교체된 이전 소켓이면 새 연결 상태를 덮어쓰지 않음
                 if (controlSocket === socket) {
                     handlePeerDisconnected()
+                }
+            }
+        }
+
+        // 연결 유지 PING 송신 + 상대 무응답 감지 (Wi-Fi 끊김 등으로 남은 '반쪽 연결' 정리)
+        coroutineScope.launch(Dispatchers.IO) {
+            while (isActive && readerJob.isActive && !socket.isClosed) {
+                sendControlMessage(
+                    ControlMessage(
+                        type = MessageType.PING,
+                        senderRole = _uiState.value.currentRole.name,
+                        senderIp = _uiState.value.localIp
+                    )
+                )
+                delay(HEARTBEAT_INTERVAL_MS)
+                if (System.currentTimeMillis() - lastPeerActivityAt > PEER_SILENCE_TIMEOUT_MS) {
+                    Log.w(TAG, "Peer silent for ${PEER_SILENCE_TIMEOUT_MS}ms, closing control socket")
+                    try {
+                        socket.close() // 수신 루프가 종료되며 handlePeerDisconnected() 호출
+                    } catch (_: Exception) {
+                    }
+                    break
                 }
             }
         }
@@ -292,13 +335,36 @@ class MockCallManager(
     private fun handlePeerDisconnected() {
         audioStreamer.stopStreaming()
         stopCallTimer()
+        closeControlSocket()
+
+        // 방을 연 쪽(호스트)은 방을 유지하고 다시 참여자를 기다림
+        val isHosting = serverSocket?.isClosed == false
+        var resumedWaiting = false
         _uiState.update {
-            it.copy(
+            val next = when {
                 // 통화 종료 후 상대가 나가도 결과 확인(ENDED) 화면은 유지
-                callStatus = if (it.callStatus == CallStatus.ENDED) CallStatus.ENDED else CallStatus.IDLE,
-                remotePeerIp = null
-            )
+                it.callStatus == CallStatus.ENDED -> CallStatus.ENDED
+                isHosting -> CallStatus.WAITING_PEER
+                else -> CallStatus.IDLE
+            }
+            resumedWaiting = next == CallStatus.WAITING_PEER
+            it.copy(callStatus = next, remotePeerIp = null)
         }
+        if (resumedWaiting) {
+            startBeaconSender(_uiState.value.roomId)
+        }
+    }
+
+    private fun closeControlSocket() {
+        try {
+            socketWriter?.close()
+            socketReader?.close()
+            controlSocket?.close()
+        } catch (_: Exception) {
+        }
+        socketWriter = null
+        socketReader = null
+        controlSocket = null
     }
 
     /**
@@ -654,19 +720,14 @@ class MockCallManager(
         serverJob = null
         clientJob = null
 
+        // 서버 소켓을 먼저 닫아, 제어 소켓 종료로 호출되는 handlePeerDisconnected()가
+        // '호스트 대기'로 되돌리지 않게 함
         try {
-            socketWriter?.close()
-            socketReader?.close()
-            controlSocket?.close()
             serverSocket?.close()
-        } catch (e: Exception) {
-            // Ignore
+        } catch (_: Exception) {
         }
-
-        socketWriter = null
-        socketReader = null
-        controlSocket = null
         serverSocket = null
+        closeControlSocket()
 
         _uiState.update {
             it.copy(

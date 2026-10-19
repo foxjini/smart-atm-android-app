@@ -1163,7 +1163,7 @@ private fun LobbyView(
                             OutlinedTextField(
                                 value = targetIpInput,
                                 onValueChange = onTargetIpChange,
-                                placeholder = { Text("상대방 IP (예: 192.168.0.x)") },
+                                placeholder = { Text("상대방 IP (예: 192.168.137.1)") },
                                 modifier = Modifier.weight(1f),
                                 singleLine = true
                             )

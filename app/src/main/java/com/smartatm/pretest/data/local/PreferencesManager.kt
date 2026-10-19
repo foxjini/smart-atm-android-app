@@ -13,7 +13,8 @@ class PreferencesManager(context: Context) {
         private const val KEY_PASSWORD = "password"
         private const val KEY_AUTH_TOKEN = "auth_token"
 
-        const val DEFAULT_SERVER_URL = "http://192.168.0.100:8000"
+        // 시연 환경: 모바일 핫스팟(호스트 192.168.137.1)에서 백엔드 서버 실행
+        const val DEFAULT_SERVER_URL = "http://192.168.137.1:8000"
         const val DEFAULT_USERNAME = "halmeoni"
     }
 
