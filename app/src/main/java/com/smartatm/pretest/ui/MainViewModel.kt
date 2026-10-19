@@ -9,6 +9,7 @@ import com.smartatm.pretest.data.api.RetrofitProvider
 import com.smartatm.pretest.data.local.PreferencesManager
 import com.smartatm.pretest.data.model.AnalysisRequest
 import com.smartatm.pretest.data.model.AnalysisResponse
+import com.smartatm.pretest.data.model.ErrorResponse
 import com.smartatm.pretest.data.model.LoginRequest
 import com.smartatm.pretest.util.LocalRiskAnalyzer
 import com.smartatm.pretest.util.QrCodeGenerator
@@ -18,16 +19,11 @@ import com.smartatm.pretest.mockcall.CallStatus
 import com.smartatm.pretest.mockcall.MockCallManager
 import com.smartatm.pretest.mockcall.MockCallUiState
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -66,7 +62,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     )
     val mockCallUiState: StateFlow<MockCallUiState> = mockCallManager.uiState
-    private var mockAnalysisJob: Job? = null
 
     // UI State
     private val _serverUrl = MutableStateFlow(preferencesManager.serverUrl)
@@ -104,6 +99,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _qrBitmap = MutableStateFlow<Bitmap?>(null)
     val qrBitmap: StateFlow<Bitmap?> = _qrBitmap.asStateFlow()
+
+    // 서버 확인을 받지 못한 결과일 때 그 이유 (null이면 서버가 판정한 결과)
+    private val _resultNotice = MutableStateFlow<String?>(null)
+    val resultNotice: StateFlow<String?> = _resultNotice.asStateFlow()
 
     private val _rmsVolume = MutableStateFlow(0f)
     val rmsVolume: StateFlow<Float> = _rmsVolume.asStateFlow()
@@ -332,8 +331,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
             val token = _authToken.value
             if (token.isBlank()) {
-                // 로그인하지 않은 오프라인 환경: 온디바이스 지능형 분석 즉시 수행
-                applyLocalAnalysis(message, "local")
+                showLocalResult(message, "로그인하지 않아 서버에서 확인하지 못했습니다.")
                 _isLoading.value = false
                 onSuccess?.invoke()
                 return@launch
@@ -348,6 +346,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 if (response.isSuccessful && response.body() != null) {
                     val result = response.body()!!.data
                     _analysisResult.value = result
+                    _resultNotice.value = null
 
                     // Generate QR if risk is not SAFE and sessionId is present
                     if (result.riskLevel != "SAFE" && !result.sessionId.isNullOrBlank()) {
@@ -361,15 +360,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
 
                     onSuccess?.invoke()
+                } else if (response.code() == 401) {
+                    // 토큰 만료(12시간)·손상 · 서버 DB를 새로 만든 뒤의 옛 토큰.
+                    // 여기서 조용히 앱 판정으로 넘어가면, ATM이 모르는 결과를 들고 ATM 앞에 서게 된다.
+                    preferencesManager.clearAuth()
+                    _authToken.value = ""
+                    val msg = parseErrorMessage(response.errorBody()?.string(), "로그인이 만료되었습니다.")
+                    _errorMessage.value = "$msg (설정 화면 → 로그인)"
                 } else {
-                    // 서버 실패 시 로컬 온디바이스 분석으로 graceful fallback
-                    Log.w(TAG, "Backend analysis failed (HTTP ${response.code()}), falling back to local analysis")
-                    applyLocalAnalysis(message, "local")
+                    Log.w(TAG, "Backend analysis failed (HTTP ${response.code()}), showing local result")
+                    val msg = parseErrorMessage(response.errorBody()?.string(), "HTTP ${response.code()}")
+                    showLocalResult(message, "서버 오류로 확인하지 못했습니다: $msg")
                     onSuccess?.invoke()
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Analysis network failed, falling back to local analysis", e)
-                applyLocalAnalysis(message, "local")
+                Log.e(TAG, "Analysis network failed, showing local result", e)
+                showLocalResult(message, "서버에 연결할 수 없습니다: ${_serverUrl.value}")
                 onSuccess?.invoke()
             } finally {
                 _isLoading.value = false
@@ -378,36 +384,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * 온디바이스 분석 결과를 반영하고, 위험(CAUTION/DANGER)일 때만 QR 생성 (SAFE면 이전 QR 제거)
+     * 서버 확인 없이 앱 규칙으로만 판정한 결과를 보여 준다 — 참고용이고 **QR은 만들지 않는다.**
+     *
+     * ATM은 QR의 session_id를 서버에 물어 본다. 서버에 없는 번호(예전의 "local-…")를 비추면
+     * "등록되지 않은 QR"로 보고 막지 않는다 — 앱 화면은 "위험"인데 ATM은 돈을 내준다.
      */
-    private suspend fun applyLocalAnalysis(message: String, sessionPrefix: String) {
+    private fun showLocalResult(message: String, reason: String) {
         val localResult = LocalRiskAnalyzer.analyze(message)
-        val fakeSessionId = "$sessionPrefix-${System.currentTimeMillis()}"
         _analysisResult.value = AnalysisResponse(
-            sessionId = fakeSessionId,
             riskScore = localResult.riskScore,
             riskLevel = localResult.riskLevel,
             summary = localResult.summary,
-            reasons = localResult.reasons,
-            atmAction = when (localResult.riskLevel) {
-                "DANGER" -> "BLOCK"
-                "CAUTION" -> "VERIFY"
-                else -> "ALLOW"
-            }
+            reasons = localResult.reasons
         )
-        _qrBitmap.value = if (localResult.riskLevel != "SAFE") {
-            val qrPayload = "{\"session_id\": \"$fakeSessionId\"}"
-            withContext(Dispatchers.Default) {
-                QrCodeGenerator.generateQrBitmap(qrPayload, 800)
-            }
-        } else {
-            null
-        }
+        _resultNotice.value = reason
+        _qrBitmap.value = null
     }
 
     fun resetAnalysis() {
         _analysisResult.value = null
         _qrBitmap.value = null
+        _resultNotice.value = null
         _errorMessage.value = null
     }
 
@@ -416,23 +413,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun parseErrorMessage(errorJson: String?, fallback: String): String {
-        if (errorJson.isNullOrBlank()) return fallback
-        return try {
-            val jsonElement = Json.parseToJsonElement(errorJson).jsonObject
-            val detail = jsonElement["detail"]
-            if (detail != null) {
-                if (detail is kotlinx.serialization.json.JsonObject) {
-                    val message = detail["message"]?.jsonPrimitive?.content
-                    message ?: fallback
-                } else {
-                    detail.jsonPrimitive.content
-                }
-            } else {
-                fallback
-            }
-        } catch (e: Exception) {
-            fallback
-        }
+        return ErrorResponse.parse(errorJson)?.message ?: fallback
     }
 
     fun analyzeMockCallRealtime(text: String) {
@@ -441,7 +422,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // 공격자 모드는 통화만 수행하며 보이스피싱 위험도 분석은 피해자 기기에서만 진행
         if (mockCallUiState.value.currentRole == CallRole.ATTACKER) return
 
-        // 1. 서버 로그인 여부와 관계없이 온디바이스 로컬 규칙 분석을 즉시 적용 (0ms 지연)
+        // 통화 중 자막 경고는 앱 규칙으로만 낸다 (서버와 같은 규칙이라 결과도 같다).
+        // 문장마다 서버에 보내면 POST /analysis 한 번마다 세션이 새로 생겨, 통화 한 번에
+        // 콜센터 '확인 필요' 목록이 같은 통화로 여러 줄 찬다. 서버에는 통화가 끝난 뒤
+        // confirmMockCallResult()에서 한 번만 보낸다 — 그 세션이 QR에 들어간다.
         val localResult = LocalRiskAnalyzer.analyze(trimmed)
         mockCallManager.updateRiskAnalysis(
             riskLevel = localResult.riskLevel,
@@ -450,42 +434,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             reasons = localResult.reasons,
             warning = localResult.warning
         )
-
-        // 2. 서버 토큰이 존재하는 경우 백엔드 AI 모델로 심층 보강 분석 (옵션)
-        val token = _authToken.value
-        if (token.isBlank()) {
-            return // 비로그인 상태라도 로컬 온디바이스 분석이 이미 완벽히 완료되어 화면에 표출됨
-        }
-
-        mockAnalysisJob?.cancel()
-        mockAnalysisJob = viewModelScope.launch(Dispatchers.IO) {
-            try {
-                delay(300)
-                val service = retrofitProvider.getApiService()
-                val authHeader = "Bearer $token"
-                val request = AnalysisRequest(message = trimmed)
-                val response = service.analyzeMessage(authHeader, request)
-
-                if (response.isSuccessful && response.body() != null) {
-                    val data = response.body()!!.data
-                    val warning = when (data.riskLevel) {
-                        "DANGER" -> "⚠️ 보이스피싱 강력 의심! (위험 점수: ${data.riskScore}/100) 즉시 통화를 종료하세요."
-                        "CAUTION" -> "⚠️ 의심스러운 금융/기관 언급이 감지되었습니다. (주의 점수: ${data.riskScore}/100)"
-                        else -> null
-                    }
-                    mockCallManager.updateRiskAnalysis(
-                        riskLevel = data.riskLevel,
-                        riskScore = data.riskScore,
-                        summary = data.summary,
-                        reasons = data.reasons,
-                        warning = warning
-                    )
-                }
-            } catch (e: Exception) {
-                // 서버 연결 실패 시에도 로컬 분석 결과가 안전하게 유지됨
-                Log.d(TAG, "Backend analysis skipped/error: ${e.message}")
-            }
-        }
     }
 
     fun confirmMockCallResult(onSuccess: () -> Unit) {
@@ -496,11 +444,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         val token = _authToken.value
         if (token.isBlank()) {
-            // 로그인하지 않은 경우에도 통화 종료 후 결과 화면 및 ATM 차단 QR 정상 생성
-            viewModelScope.launch {
-                applyLocalAnalysis(fullTranscript, "mock-call")
-                onSuccess.invoke()
-            }
+            // 로그인하지 않았으면 결과는 보여 주되 QR은 만들지 않는다 (showLocalResult 참고)
+            showLocalResult(fullTranscript, "로그인하지 않아 서버에서 확인하지 못했습니다.")
+            onSuccess.invoke()
         } else {
             analyze(onSuccess = onSuccess)
         }

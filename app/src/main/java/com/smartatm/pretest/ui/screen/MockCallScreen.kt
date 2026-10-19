@@ -382,10 +382,11 @@ private fun InCallView(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
+                                // 통화 중 자막 판정은 늘 앱에서 한다(서버와 같은 규칙). 서버는 통화 종료 후 한 번
                                 text = when {
                                     !isVictim -> "• 통화 전용 모드"
-                                    hasAuthToken -> "• 서버 AI 연동"
-                                    else -> "• 온디바이스 실시간 분석"
+                                    hasAuthToken -> "• 종료 후 서버 확인 · QR 발급"
+                                    else -> "• 앱 판정만 (QR은 로그인 필요)"
                                 },
                                 fontSize = 11.sp,
                                 color = when {

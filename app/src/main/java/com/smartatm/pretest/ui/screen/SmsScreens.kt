@@ -278,6 +278,8 @@ fun SmsDetailScreen(
     val message = SampleMessages.findById(messageId)
     val isLoading by viewModel.isLoading.collectAsState()
     val checkResults by viewModel.smsCheckResults.collectAsState()
+    // 로그인 만료(401) 같은 실패는 결과 화면으로 넘어가지 않으므로 여기서 보여 줘야 한다
+    val errorMessage by viewModel.errorMessage.collectAsState()
 
     Scaffold(
         containerColor = Color.White,
@@ -312,6 +314,15 @@ fun SmsDetailScreen(
                         .navigationBarsPadding()
                 ) {
                     HorizontalDivider(color = Color(0xFFEAEAEA))
+                    if (!errorMessage.isNullOrBlank()) {
+                        Text(
+                            text = errorMessage ?: "",
+                            color = RiskDangerRed,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp)
+                        )
+                    }
                     Button(
                         onClick = {
                             viewModel.analyzeSms(message.id, message.body, onSuccess = onNavigateToResult)

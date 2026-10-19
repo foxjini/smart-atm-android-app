@@ -67,18 +67,29 @@ class SerializationTest {
 
     @Test
     fun testErrorSerialization() {
-        val rawError = """
-            {
-                "detail": {
-                    "code": "INVALID_CREDENTIALS",
-                    "message": "아이디 또는 비밀번호가 올바르지 않습니다."
-                }
-            }
-        """.trimIndent()
+        // 실제 서버가 보낸 본문 그대로 (잘못된 비밀번호, HTTP 401)
+        val rawError = """{"error":{"code":"INVALID_CREDENTIALS","message":"아이디 또는 비밀번호가 올바르지 않습니다."}}"""
 
-        val parsed: ErrorResponse = json.decodeFromString(rawError)
-        assertNotNull(parsed.detail)
-        assertEquals("INVALID_CREDENTIALS", parsed.detail?.code)
+        val parsed = ErrorResponse.parse(rawError)
+        assertNotNull(parsed)
+        assertEquals("INVALID_CREDENTIALS", parsed?.code)
+        assertEquals("아이디 또는 비밀번호가 올바르지 않습니다.", parsed?.message)
+    }
+
+    @Test
+    fun testValidationErrorWithDetails() {
+        // 2001자를 보냈을 때 (HTTP 422) — details 배열이 더 붙어 온다
+        val raw = """{"error":{"code":"VALIDATION_ERROR","message":"요청 형식이 올바르지 않습니다.","details":[{"type":"string_too_long","loc":["body","message"]}]}}"""
+        assertEquals("요청 형식이 올바르지 않습니다.", ErrorResponse.parse(raw)?.message)
+    }
+
+    @Test
+    fun testNonJsonErrorBody() {
+        // 공유기·프록시가 HTML 오류 페이지를 돌려줄 때 앱이 죽지 않아야 한다
+        assertEquals(null, ErrorResponse.parse("<html><body>502 Bad Gateway</body></html>"))
+        assertEquals(null, ErrorResponse.parse(""))
+        assertEquals(null, ErrorResponse.parse(null))
+        assertEquals(null, ErrorResponse.parse("""{"detail":"Not Found"}""")?.message)
     }
 
     @Test

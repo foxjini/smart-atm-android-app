@@ -65,6 +65,7 @@ fun ResultScreen(
     val context = LocalContext.current
     val analysisResult by viewModel.analysisResult.collectAsState()
     val qrBitmap by viewModel.qrBitmap.collectAsState()
+    val resultNotice by viewModel.resultNotice.collectAsState()
 
     // Screen Brightness Max & Keep Screen On for ATM Camera recognition (PRD 5-4)
     DisposableEffect(Unit) {
@@ -165,10 +166,41 @@ fun ResultScreen(
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = "위험 점수: ${riskScore}점 / 100점 (ATM 조치: $atmAction)",
+                            text = if (resultNotice == null) {
+                                "위험 점수: ${riskScore}점 / 100점 (ATM 조치: $atmAction)"
+                            } else {
+                                "위험 점수: ${riskScore}점 / 100점 (서버 확인 전)"
+                            },
                             fontSize = 17.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = Color.Black
+                        )
+                    }
+                }
+            }
+
+            // 서버 확인을 받지 못한 결과 — ATM이 모르는 결과이므로 QR 대신 이유를 보여 준다
+            if (resultNotice != null) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = "⚠ 서버 확인 전 결과 (앱 자체 판정 · 참고용)",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFE65100)
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(text = resultNotice ?: "", fontSize = 16.sp, color = Color.Black)
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "ATM은 서버에 등록된 검사 결과만 막을 수 있어 QR을 만들지 않았습니다. " +
+                                "서버 연결과 로그인을 확인한 뒤 다시 검사해 주세요.",
+                            fontSize = 15.sp,
+                            color = Color.DarkGray
                         )
                     }
                 }
