@@ -23,10 +23,19 @@ class MainViewModelTest {
     }
 
     @Test
-    fun testAtmTransferRiskAnalysis() {
-        val result = com.smartatm.pretest.util.LocalRiskAnalyzer.analyze("ATM에 가서 송금")
-        assertEquals("DANGER", result.riskLevel)
-        assertTrue("위험 점수가 85점 이상이어야 함", result.riskScore >= 85)
-        assertTrue("ATM 또는 송금 관련 감지 이유가 포함되어야 함", result.reasons.any { it.contains("ATM") || it.contains("송금") })
+    fun testDemoScriptsGiveTheExpectedLevels() {
+        // 서버(ATM 저장소 backend/analysis)와 같은 기준이다 — 대본을 고쳤다면 서버에도 넣어 확인한다
+        val analyze = com.smartatm.pretest.util.LocalRiskAnalyzer::analyze
+        assertEquals("DANGER", analyze(MainViewModel.SCRIPT_VOICE_PHISHING_CALL).riskLevel)
+        assertEquals("DANGER", analyze(MainViewModel.SCRIPT_VOICE_PHISHING_SMS).riskLevel)
+        assertEquals("SAFE", analyze(MainViewModel.SCRIPT_NORMAL_CALL).riskLevel)
+        assertEquals("SAFE", analyze(MainViewModel.SCRIPT_NORMAL_SMS).riskLevel)
+    }
+
+    @Test
+    fun testPlainWordsAboutBanksAreNotDanger() {
+        // 예전 앱 규칙은 '은행'+'보내'만으로 DANGER 85점을 줬다. 서버는 0점이다
+        assertEquals("SAFE", com.smartatm.pretest.util.LocalRiskAnalyzer.analyze("ATM에 가서 송금").riskLevel)
+        assertEquals("SAFE", com.smartatm.pretest.util.LocalRiskAnalyzer.analyze("은행 들러서 용돈 보내 드릴게요.").riskLevel)
     }
 }

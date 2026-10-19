@@ -5,6 +5,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+/**
+ * 앱 규칙은 서버(ATM 저장소 backend/analysis)와 같다 — 전체 비교는 LocalRiskAnalyzerParityTest가 한다.
+ * 여기서는 시연에서 중요한 문장이 기대한 등급으로 나오는지를 사람이 읽기 쉬운 형태로 확인한다.
+ */
 class LocalRiskAnalyzerTest {
 
     // PRD 부록 시연 대본 (MainViewModel 상수와 동일한 문장)
@@ -52,22 +56,28 @@ class LocalRiskAnalyzerTest {
 
     @Test
     fun prosecutorImpersonationIsStillDetected() {
+        // "건강검사"는 잡지 않고 "검사입니다"만 잡는다 — 서버 사전도 "검사"가 아니라 "검사입니다"다
         val result = LocalRiskAnalyzer.analyze("검사입니다. 계좌가 동결될 수 있어 확인이 필요합니다.")
-        assertTrue(result.reasons.any { it.contains("'검사'") })
-        assertEquals("DANGER", result.riskLevel)
+        assertTrue(result.reasons.contains("기관 사칭 표현 감지"))
+        assertEquals("CAUTION", result.riskLevel)  // CAUTION → ATM은 VERIFY로 출금을 제한한다
     }
 
     @Test
-    fun deliverySmishingLinkIsDanger() {
-        val result = LocalRiskAnalyzer.analyze("[택배] 주소지 불명으로 반송 예정입니다. 주소 확인: http://abc-track.xyz/a8")
-        assertEquals("DANGER", result.riskLevel)
-        assertTrue(result.reasons.any { it.contains("스미싱") })
+    fun linkOnlySmishingIsOutsideTheRules() {
+        // 돈을 요구하지 않는 링크형 스미싱은 PRD 5.2의 7개 범주 밖이다 (팀 결정, 2026-10-19).
+        // 이 작품은 '현금 인출을 막는 ATM'이므로 서버도 앱도 잡지 않는다 — 잡게 하려면 서버 범주부터 바꾼다
+        assertEquals("SAFE", LocalRiskAnalyzer.analyze("[택배] 주소지 불명으로 반송 예정입니다. 주소 확인: http://abc-track.xyz/a8").riskLevel)
+        assertEquals("SAFE", LocalRiskAnalyzer.analyze("오늘 본 영상 링크야 https://example.com/v/123").riskLevel)
     }
 
     @Test
-    fun linkAloneIsCaution() {
-        val result = LocalRiskAnalyzer.analyze("오늘 본 영상 링크야 https://example.com/v/123")
-        assertEquals("CAUTION", result.riskLevel)
+    fun giftCardAndPrepaymentScamsAreCaution() {
+        // 서버 사전에 보탠 키워드(급하게·상품권·핀번호·선입금·보증료)로 잡는다
+        val giftCard = "급하게 결제할 게 있는데 문화상품권 핀번호 보내줄 수 있어? 아빠한테는 비밀로 해줘."
+        val prepay = "저금리 대환대출 대상자입니다. 보증료 선입금 확인 즉시 지급됩니다."
+        assertEquals("CAUTION", LocalRiskAnalyzer.analyze(giftCard).riskLevel)
+        assertEquals("CAUTION", LocalRiskAnalyzer.analyze(prepay).riskLevel)
+        assertEquals("SAFE", LocalRiskAnalyzer.analyze("백화점 상품권 선물 받았어요").riskLevel)
     }
 
     @Test

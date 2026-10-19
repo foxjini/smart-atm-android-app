@@ -63,10 +63,12 @@ object SampleMessages {
         ),
         SmsMessage(
             id = 5,
-            sender = "1588-1255",
-            phoneNumber = "1588-1255",
+            // 링크만 있고 돈을 요구하지 않는 스미싱은 서버 규칙(PRD 5.2의 7개 범주) 밖이라 SAFE로 나온다.
+            // 이 작품은 '현금 인출을 막는 ATM'이므로, 같은 택배 사칭이라도 송금을 요구하는 문자로 둔다.
+            sender = "010-6623-4019",
+            phoneNumber = "010-6623-4019",
             isContact = false,
-            body = "[CJ대한통운] 고객님의 택배가 주소지 불명으로 반송 예정입니다. 아래 링크에서 주소를 확인해 주세요. http://cj-delivery.kr-track.xyz/a8",
+            body = "[국제택배] 해외 직구 물품이 관세 미납으로 통관 보류 중입니다. 오늘 안에 관세 38,000원을 아래 계좌로 송금하세요. 미납 시 물품은 반송됩니다. (농협 000-0000-0000-00)",
             timeLabel = "어제",
             dateLabel = "어제",
             unreadCount = 1,

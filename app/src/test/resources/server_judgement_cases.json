@@ -1,0 +1,1034 @@
+[
+ {
+  "text": "여보세요, 서울중앙지검 수사관입니다. 선생님 명의로 개설된 계좌가 대포통장 사건에 연루되어 수사 중입니다. 지금 바로 은행에 가셔서 예금을 전액 인출하신 다음에, 저희가 알려드리는 안전계좌로 입금해 주셔야 합니다. 이건 수사 중인 사안이라 가족에게 말씀하지 마시고 혼자 오셔야 합니다.",
+  "risk_level": "DANGER",
+  "risk_score": 100,
+  "reasons": [
+   "기관 사칭 표현 감지",
+   "범죄 연루 언급 감지",
+   "현금 인출 요구 감지",
+   "송금·이체 요구 감지",
+   "긴급 행동 요구 감지",
+   "비밀 유지 요구 감지"
+  ],
+  "summary": "기관 사칭 표현 및 범죄 연루 언급 감지"
+ },
+ {
+  "text": "[국세청] 귀하의 계좌가 범죄에 연루되어 있습니다. 즉시 500만원을 인출해 강남역 3번 출구에서 전달하세요. 타인에게 발설하지 마십시오.",
+  "risk_level": "DANGER",
+  "risk_score": 100,
+  "reasons": [
+   "기관 사칭 표현 감지",
+   "범죄 연루 언급 감지",
+   "현금 인출 요구 감지",
+   "긴급 행동 요구 감지",
+   "비밀 유지 요구 감지"
+  ],
+  "summary": "기관 사칭 표현 및 범죄 연루 언급 감지"
+ },
+ {
+  "text": "엄마, 나야. 오늘 저녁에 집에 갈 건데 뭐 사갈까? 병원 예약은 목요일 두 시로 해놨어. 아버지 약도 타와야 하니까 처방전 챙겨놔. 끊을게, 이따 봐.",
+  "risk_level": "SAFE",
+  "risk_score": 0,
+  "reasons": [],
+  "summary": "위험 표현이 발견되지 않았습니다"
+ },
+ {
+  "text": "어머니, 목요일 병원 예약 2시입니다. 처방전 잊지 마세요.",
+  "risk_level": "SAFE",
+  "risk_score": 0,
+  "reasons": [],
+  "summary": "위험 표현이 발견되지 않았습니다"
+ },
+ {
+  "text": "여보세요, 서울중앙지검 수사관입니다.",
+  "risk_level": "CAUTION",
+  "risk_score": 35,
+  "reasons": [
+   "기관 사칭 표현 감지"
+  ],
+  "summary": "기관 사칭 표현 감지"
+ },
+ {
+  "text": "여보세요, 서울중앙지검 수사관입니다. 선생님 명의로 개설된 계좌가 대포통장 사건에 연루되어 수사 중입니다.",
+  "risk_level": "CAUTION",
+  "risk_score": 60,
+  "reasons": [
+   "기관 사칭 표현 감지",
+   "범죄 연루 언급 감지"
+  ],
+  "summary": "기관 사칭 표현 및 범죄 연루 언급 감지"
+ },
+ {
+  "text": "ATM에 가서 송금",
+  "risk_level": "SAFE",
+  "risk_score": 0,
+  "reasons": [],
+  "summary": "위험 표현이 발견되지 않았습니다"
+ },
+ {
+  "text": "엄마, 병원 검사 결과 확인했어. 괜찮대.",
+  "risk_level": "SAFE",
+  "risk_score": 0,
+  "reasons": [],
+  "summary": "위험 표현이 발견되지 않았습니다"
+ },
+ {
+  "text": "은행 들러서 용돈 보내 드릴게요.",
+  "risk_level": "SAFE",
+  "risk_score": 0,
+  "reasons": [],
+  "summary": "위험 표현이 발견되지 않았습니다"
+ },
+ {
+  "text": "아버지, 이번 달 대출 이자 납부했어요.",
+  "risk_level": "SAFE",
+  "risk_score": 0,
+  "reasons": [],
+  "summary": "위험 표현이 발견되지 않았습니다"
+ },
+ {
+  "text": "",
+  "risk_level": "SAFE",
+  "risk_score": 0,
+  "reasons": [],
+  "summary": "위험 표현이 발견되지 않았습니다"
+ },
+ {
+  "text": "   ",
+  "risk_level": "SAFE",
+  "risk_score": 0,
+  "reasons": [],
+  "summary": "위험 표현이 발견되지 않았습니다"
+ },
+ {
+  "text": "ATM 앞에서 즉시 인출하세요",
+  "risk_level": "CAUTION",
+  "risk_score": 45,
+  "reasons": [
+   "현금 인출 요구 감지",
+   "긴급 행동 요구 감지"
+  ],
+  "summary": "현금 인출 요구 및 긴급 행동 요구 감지"
+ },
+ {
+  "text": "금감원 직원이 찾아갑니다. 비밀로 하세요.",
+  "risk_level": "DANGER",
+  "risk_score": 85,
+  "reasons": [
+   "기관 사칭 표현 감지",
+   "비밀 유지 요구 감지",
+   "특정 장소 현금 전달 요구 감지"
+  ],
+  "summary": "기관 사칭 표현 및 비밀 유지 요구 감지"
+ },
+ {
+  "text": "[국세청] 귀하의 계좌가 범죄에 연루되어 있습니다. 즉시 500만원을 인출해 강남역 3번 출구에서 전달하세요. 타인에게 발설하지 마십시오.",
+  "risk_level": "DANGER",
+  "risk_score": 100,
+  "reasons": [
+   "기관 사칭 표현 감지",
+   "범죄 연루 언급 감지",
+   "현금 인출 요구 감지",
+   "긴급 행동 요구 감지",
+   "비밀 유지 요구 감지"
+  ],
+  "summary": "기관 사칭 표현 및 범죄 연루 언급 감지"
+ },
+ {
+  "text": "어머니, 목요일 병원 예약 2시입니다. 처방전 잊지 마세요.",
+  "risk_level": "SAFE",
+  "risk_score": 0,
+  "reasons": [],
+  "summary": "위험 표현이 발견되지 않았습니다"
+ },
+ {
+  "text": "엄마 나 폰 액정이 깨져서 수리 맡기고 임시폰으로 연락해. 급하게 결제할 게 있는데 문화상품권 10만원권 5장만 사서 핀번호 보내줄 수 있어? 아빠한테는 비밀로 해줘.",
+  "risk_level": "CAUTION",
+  "risk_score": 65,
+  "reasons": [
+   "송금·이체 요구 감지",
+   "긴급 행동 요구 감지",
+   "비밀 유지 요구 감지"
+  ],
+  "summary": "송금·이체 요구 및 긴급 행동 요구 감지"
+ },
+ {
+  "text": "내일 저녁 7시에 학교 앞에서 보자! 늦지 마~",
+  "risk_level": "SAFE",
+  "risk_score": 0,
+  "reasons": [],
+  "summary": "위험 표현이 발견되지 않았습니다"
+ },
+ {
+  "text": "[국제택배] 해외 직구 물품이 관세 미납으로 통관 보류 중입니다. 오늘 안에 관세 38,000원을 아래 계좌로 송금하세요. 미납 시 물품은 반송됩니다. (농협 000-0000-0000-00)",
+  "risk_level": "CAUTION",
+  "risk_score": 40,
+  "reasons": [
+   "송금·이체 요구 감지",
+   "긴급 행동 요구 감지"
+  ],
+  "summary": "송금·이체 요구 및 긴급 행동 요구 감지"
+ },
+ {
+  "text": "[인천전자마이스터고] 10월 정보통신과 현장실습 설명회가 금요일 오후 3시 본관 강당에서 진행됩니다. 많은 참석 바랍니다.",
+  "risk_level": "SAFE",
+  "risk_score": 0,
+  "reasons": [],
+  "summary": "위험 표현이 발견되지 않았습니다"
+ },
+ {
+  "text": "[국제발신] 고객님은 정부지원 저금리 대환대출 대상자입니다. 기존 대출 상환 후 승인되며, 보증료 선입금 확인 즉시 3,000만원 지급됩니다.",
+  "risk_level": "CAUTION",
+  "risk_score": 40,
+  "reasons": [
+   "송금·이체 요구 감지",
+   "긴급 행동 요구 감지"
+  ],
+  "summary": "송금·이체 요구 및 긴급 행동 요구 감지"
+ },
+ {
+  "text": "오늘 비 온다더라. 우산 꼭 챙겨가고 저녁은 집에서 먹자.",
+  "risk_level": "SAFE",
+  "risk_score": 0,
+  "reasons": [],
+  "summary": "위험 표현이 발견되지 않았습니다"
+ },
+ {
+  "text": "서울중앙지검 수사관입니다. 선생님 명의 계좌가 대포통장 사건에 연루되어 계좌 동결 예정입니다. 자산 보호를 위해 안전계좌로 이체하셔야 합니다.",
+  "risk_level": "DANGER",
+  "risk_score": 85,
+  "reasons": [
+   "기관 사칭 표현 감지",
+   "범죄 연루 언급 감지",
+   "송금·이체 요구 감지"
+  ],
+  "summary": "기관 사칭 표현 및 범죄 연루 언급 감지"
+ },
+ {
+  "text": "민준 어머님, 다음 주 수요일 학부모 상담 시간 확인 부탁드립니다. 편하신 시간 알려주세요.",
+  "risk_level": "SAFE",
+  "risk_score": 0,
+  "reasons": [],
+  "summary": "위험 표현이 발견되지 않았습니다"
+ },
+ {
+  "text": "고객님, 검찰 관련 안내입니다.",
+  "risk_level": "CAUTION",
+  "risk_score": 35,
+  "reasons": [
+   "기관 사칭 표현 감지"
+  ],
+  "summary": "기관 사칭 표현 감지"
+ },
+ {
+  "text": "고객님, 검사입니다 관련 안내입니다.",
+  "risk_level": "CAUTION",
+  "risk_score": 35,
+  "reasons": [
+   "기관 사칭 표현 감지"
+  ],
+  "summary": "기관 사칭 표현 감지"
+ },
+ {
+  "text": "고객님, 수사관 관련 안내입니다.",
+  "risk_level": "CAUTION",
+  "risk_score": 35,
+  "reasons": [
+   "기관 사칭 표현 감지"
+  ],
+  "summary": "기관 사칭 표현 감지"
+ },
+ {
+  "text": "고객님, 경찰청 관련 안내입니다.",
+  "risk_level": "CAUTION",
+  "risk_score": 35,
+  "reasons": [
+   "기관 사칭 표현 감지"
+  ],
+  "summary": "기관 사칭 표현 감지"
+ },
+ {
+  "text": "고객님, 경찰서 관련 안내입니다.",
+  "risk_level": "CAUTION",
+  "risk_score": 35,
+  "reasons": [
+   "기관 사칭 표현 감지"
+  ],
+  "summary": "기관 사칭 표현 감지"
+ },
+ {
+  "text": "고객님, 금융감독원 관련 안내입니다.",
+  "risk_level": "CAUTION",
+  "risk_score": 35,
+  "reasons": [
+   "기관 사칭 표현 감지"
+  ],
+  "summary": "기관 사칭 표현 감지"
+ },
+ {
+  "text": "고객님, 금감원 관련 안내입니다.",
+  "risk_level": "CAUTION",
+  "risk_score": 35,
+  "reasons": [
+   "기관 사칭 표현 감지"
+  ],
+  "summary": "기관 사칭 표현 감지"
+ },
+ {
+  "text": "고객님, 국세청 관련 안내입니다.",
+  "risk_level": "CAUTION",
+  "risk_score": 35,
+  "reasons": [
+   "기관 사칭 표현 감지"
+  ],
+  "summary": "기관 사칭 표현 감지"
+ },
+ {
+  "text": "고객님, 우체국입니다 관련 안내입니다.",
+  "risk_level": "CAUTION",
+  "risk_score": 35,
+  "reasons": [
+   "기관 사칭 표현 감지"
+  ],
+  "summary": "기관 사칭 표현 감지"
+ },
+ {
+  "text": "고객님, 법원입니다 관련 안내입니다.",
+  "risk_level": "CAUTION",
+  "risk_score": 35,
+  "reasons": [
+   "기관 사칭 표현 감지"
+  ],
+  "summary": "기관 사칭 표현 감지"
+ },
+ {
+  "text": "고객님, 공공기관 관련 안내입니다.",
+  "risk_level": "CAUTION",
+  "risk_score": 35,
+  "reasons": [
+   "기관 사칭 표현 감지"
+  ],
+  "summary": "기관 사칭 표현 감지"
+ },
+ {
+  "text": "고객님, 수사기관 관련 안내입니다.",
+  "risk_level": "CAUTION",
+  "risk_score": 35,
+  "reasons": [
+   "기관 사칭 표현 감지"
+  ],
+  "summary": "기관 사칭 표현 감지"
+ },
+ {
+  "text": "고객님, 은행 직원입니다 관련 안내입니다.",
+  "risk_level": "CAUTION",
+  "risk_score": 35,
+  "reasons": [
+   "기관 사칭 표현 감지"
+  ],
+  "summary": "기관 사칭 표현 감지"
+ },
+ {
+  "text": "고객님, 금융기관입니다 관련 안내입니다.",
+  "risk_level": "CAUTION",
+  "risk_score": 35,
+  "reasons": [
+   "기관 사칭 표현 감지"
+  ],
+  "summary": "기관 사칭 표현 감지"
+ },
+ {
+  "text": "고객님, 보건복지부 관련 안내입니다.",
+  "risk_level": "CAUTION",
+  "risk_score": 35,
+  "reasons": [
+   "기관 사칭 표현 감지"
+  ],
+  "summary": "기관 사칭 표현 감지"
+ },
+ {
+  "text": "고객님, 질병관리청 관련 안내입니다.",
+  "risk_level": "CAUTION",
+  "risk_score": 35,
+  "reasons": [
+   "기관 사칭 표현 감지"
+  ],
+  "summary": "기관 사칭 표현 감지"
+ },
+ {
+  "text": "고객님, 범죄에 연루 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "범죄 연루 언급 감지"
+  ],
+  "summary": "범죄 연루 언급 감지"
+ },
+ {
+  "text": "고객님, 범죄 연루 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "범죄 연루 언급 감지"
+  ],
+  "summary": "범죄 연루 언급 감지"
+ },
+ {
+  "text": "고객님, 사건에 연루 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "범죄 연루 언급 감지"
+  ],
+  "summary": "범죄 연루 언급 감지"
+ },
+ {
+  "text": "고객님, 명의도용 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "범죄 연루 언급 감지"
+  ],
+  "summary": "범죄 연루 언급 감지"
+ },
+ {
+  "text": "고객님, 명의 도용 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "범죄 연루 언급 감지"
+  ],
+  "summary": "범죄 연루 언급 감지"
+ },
+ {
+  "text": "고객님, 대포통장 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "범죄 연루 언급 감지"
+  ],
+  "summary": "범죄 연루 언급 감지"
+ },
+ {
+  "text": "고객님, 자금세탁 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "범죄 연루 언급 감지"
+  ],
+  "summary": "범죄 연루 언급 감지"
+ },
+ {
+  "text": "고객님, 자금 세탁 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "범죄 연루 언급 감지"
+  ],
+  "summary": "범죄 연루 언급 감지"
+ },
+ {
+  "text": "고객님, 구속 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "범죄 연루 언급 감지"
+  ],
+  "summary": "범죄 연루 언급 감지"
+ },
+ {
+  "text": "고객님, 체포 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "범죄 연루 언급 감지"
+  ],
+  "summary": "범죄 연루 언급 감지"
+ },
+ {
+  "text": "고객님, 수사 중 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "범죄 연루 언급 감지"
+  ],
+  "summary": "범죄 연루 언급 감지"
+ },
+ {
+  "text": "고객님, 계좌가 도용 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "범죄 연루 언급 감지"
+  ],
+  "summary": "범죄 연루 언급 감지"
+ },
+ {
+  "text": "고객님, 피의자 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "범죄 연루 언급 감지"
+  ],
+  "summary": "범죄 연루 언급 감지"
+ },
+ {
+  "text": "고객님, 출석 요구 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "범죄 연루 언급 감지"
+  ],
+  "summary": "범죄 연루 언급 감지"
+ },
+ {
+  "text": "고객님, 압수 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "범죄 연루 언급 감지"
+  ],
+  "summary": "범죄 연루 언급 감지"
+ },
+ {
+  "text": "고객님, 현금을 인출 관련 안내입니다.",
+  "risk_level": "CAUTION",
+  "risk_score": 30,
+  "reasons": [
+   "현금 인출 요구 감지"
+  ],
+  "summary": "현금 인출 요구 감지"
+ },
+ {
+  "text": "고객님, 현금 인출 관련 안내입니다.",
+  "risk_level": "CAUTION",
+  "risk_score": 30,
+  "reasons": [
+   "현금 인출 요구 감지"
+  ],
+  "summary": "현금 인출 요구 감지"
+ },
+ {
+  "text": "고객님, 인출해 관련 안내입니다.",
+  "risk_level": "CAUTION",
+  "risk_score": 30,
+  "reasons": [
+   "현금 인출 요구 감지"
+  ],
+  "summary": "현금 인출 요구 감지"
+ },
+ {
+  "text": "고객님, 인출하세요 관련 안내입니다.",
+  "risk_level": "CAUTION",
+  "risk_score": 30,
+  "reasons": [
+   "현금 인출 요구 감지"
+  ],
+  "summary": "현금 인출 요구 감지"
+ },
+ {
+  "text": "고객님, 인출하여 관련 안내입니다.",
+  "risk_level": "CAUTION",
+  "risk_score": 30,
+  "reasons": [
+   "현금 인출 요구 감지"
+  ],
+  "summary": "현금 인출 요구 감지"
+ },
+ {
+  "text": "고객님, 돈을 찾아 관련 안내입니다.",
+  "risk_level": "CAUTION",
+  "risk_score": 30,
+  "reasons": [
+   "현금 인출 요구 감지"
+  ],
+  "summary": "현금 인출 요구 감지"
+ },
+ {
+  "text": "고객님, 돈을 인출 관련 안내입니다.",
+  "risk_level": "CAUTION",
+  "risk_score": 30,
+  "reasons": [
+   "현금 인출 요구 감지"
+  ],
+  "summary": "현금 인출 요구 감지"
+ },
+ {
+  "text": "고객님, 출금하세요 관련 안내입니다.",
+  "risk_level": "CAUTION",
+  "risk_score": 30,
+  "reasons": [
+   "현금 인출 요구 감지"
+  ],
+  "summary": "현금 인출 요구 감지"
+ },
+ {
+  "text": "고객님, 출금해 관련 안내입니다.",
+  "risk_level": "CAUTION",
+  "risk_score": 30,
+  "reasons": [
+   "현금 인출 요구 감지"
+  ],
+  "summary": "현금 인출 요구 감지"
+ },
+ {
+  "text": "고객님, 현금으로 찾 관련 안내입니다.",
+  "risk_level": "CAUTION",
+  "risk_score": 30,
+  "reasons": [
+   "현금 인출 요구 감지"
+  ],
+  "summary": "현금 인출 요구 감지"
+ },
+ {
+  "text": "고객님, 예금을 찾 관련 안내입니다.",
+  "risk_level": "CAUTION",
+  "risk_score": 30,
+  "reasons": [
+   "현금 인출 요구 감지"
+  ],
+  "summary": "현금 인출 요구 감지"
+ },
+ {
+  "text": "고객님, 전액 인출 관련 안내입니다.",
+  "risk_level": "CAUTION",
+  "risk_score": 30,
+  "reasons": [
+   "현금 인출 요구 감지"
+  ],
+  "summary": "현금 인출 요구 감지"
+ },
+ {
+  "text": "고객님, 송금하세요 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "송금·이체 요구 감지"
+  ],
+  "summary": "송금·이체 요구 감지"
+ },
+ {
+  "text": "고객님, 송금해 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "송금·이체 요구 감지"
+  ],
+  "summary": "송금·이체 요구 감지"
+ },
+ {
+  "text": "고객님, 송금 바랍니다 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "송금·이체 요구 감지"
+  ],
+  "summary": "송금·이체 요구 감지"
+ },
+ {
+  "text": "고객님, 이체하세요 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "송금·이체 요구 감지"
+  ],
+  "summary": "송금·이체 요구 감지"
+ },
+ {
+  "text": "고객님, 이체해 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "송금·이체 요구 감지"
+  ],
+  "summary": "송금·이체 요구 감지"
+ },
+ {
+  "text": "고객님, 계좌로 보내 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "송금·이체 요구 감지"
+  ],
+  "summary": "송금·이체 요구 감지"
+ },
+ {
+  "text": "고객님, 안전계좌 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "송금·이체 요구 감지"
+  ],
+  "summary": "송금·이체 요구 감지"
+ },
+ {
+  "text": "고객님, 안전 계좌 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "송금·이체 요구 감지"
+  ],
+  "summary": "송금·이체 요구 감지"
+ },
+ {
+  "text": "고객님, 입금하세요 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "송금·이체 요구 감지"
+  ],
+  "summary": "송금·이체 요구 감지"
+ },
+ {
+  "text": "고객님, 입금해 주세요 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "송금·이체 요구 감지"
+  ],
+  "summary": "송금·이체 요구 감지"
+ },
+ {
+  "text": "고객님, 상품권 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "송금·이체 요구 감지"
+  ],
+  "summary": "송금·이체 요구 감지"
+ },
+ {
+  "text": "고객님, 핀번호 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "송금·이체 요구 감지"
+  ],
+  "summary": "송금·이체 요구 감지"
+ },
+ {
+  "text": "고객님, 기프트카드 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "송금·이체 요구 감지"
+  ],
+  "summary": "송금·이체 요구 감지"
+ },
+ {
+  "text": "고객님, 선입금 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "송금·이체 요구 감지"
+  ],
+  "summary": "송금·이체 요구 감지"
+ },
+ {
+  "text": "고객님, 보증료 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "송금·이체 요구 감지"
+  ],
+  "summary": "송금·이체 요구 감지"
+ },
+ {
+  "text": "고객님, 지금 바로 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 15,
+  "reasons": [
+   "긴급 행동 요구 감지"
+  ],
+  "summary": "긴급 행동 요구 감지"
+ },
+ {
+  "text": "고객님, 즉시 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 15,
+  "reasons": [
+   "긴급 행동 요구 감지"
+  ],
+  "summary": "긴급 행동 요구 감지"
+ },
+ {
+  "text": "고객님, 당장 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 15,
+  "reasons": [
+   "긴급 행동 요구 감지"
+  ],
+  "summary": "긴급 행동 요구 감지"
+ },
+ {
+  "text": "고객님, 오늘 안에 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 15,
+  "reasons": [
+   "긴급 행동 요구 감지"
+  ],
+  "summary": "긴급 행동 요구 감지"
+ },
+ {
+  "text": "고객님, 서둘러 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 15,
+  "reasons": [
+   "긴급 행동 요구 감지"
+  ],
+  "summary": "긴급 행동 요구 감지"
+ },
+ {
+  "text": "고객님, 빨리 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 15,
+  "reasons": [
+   "긴급 행동 요구 감지"
+  ],
+  "summary": "긴급 행동 요구 감지"
+ },
+ {
+  "text": "고객님, 시간이 없 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 15,
+  "reasons": [
+   "긴급 행동 요구 감지"
+  ],
+  "summary": "긴급 행동 요구 감지"
+ },
+ {
+  "text": "고객님, 마감 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 15,
+  "reasons": [
+   "긴급 행동 요구 감지"
+  ],
+  "summary": "긴급 행동 요구 감지"
+ },
+ {
+  "text": "고객님, 긴급 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 15,
+  "reasons": [
+   "긴급 행동 요구 감지"
+  ],
+  "summary": "긴급 행동 요구 감지"
+ },
+ {
+  "text": "고객님, 늦으면 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 15,
+  "reasons": [
+   "긴급 행동 요구 감지"
+  ],
+  "summary": "긴급 행동 요구 감지"
+ },
+ {
+  "text": "고객님, 급하게 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 15,
+  "reasons": [
+   "긴급 행동 요구 감지"
+  ],
+  "summary": "긴급 행동 요구 감지"
+ },
+ {
+  "text": "고객님, 급히 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 15,
+  "reasons": [
+   "긴급 행동 요구 감지"
+  ],
+  "summary": "긴급 행동 요구 감지"
+ },
+ {
+  "text": "고객님, 말하지 마 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "비밀 유지 요구 감지"
+  ],
+  "summary": "비밀 유지 요구 감지"
+ },
+ {
+  "text": "고객님, 말씀하지 마 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "비밀 유지 요구 감지"
+  ],
+  "summary": "비밀 유지 요구 감지"
+ },
+ {
+  "text": "고객님, 알리지 마 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "비밀 유지 요구 감지"
+  ],
+  "summary": "비밀 유지 요구 감지"
+ },
+ {
+  "text": "고객님, 비밀로 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "비밀 유지 요구 감지"
+  ],
+  "summary": "비밀 유지 요구 감지"
+ },
+ {
+  "text": "고객님, 비밀 유지 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "비밀 유지 요구 감지"
+  ],
+  "summary": "비밀 유지 요구 감지"
+ },
+ {
+  "text": "고객님, 누구에게도 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "비밀 유지 요구 감지"
+  ],
+  "summary": "비밀 유지 요구 감지"
+ },
+ {
+  "text": "고객님, 가족에게 말 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "비밀 유지 요구 감지"
+  ],
+  "summary": "비밀 유지 요구 감지"
+ },
+ {
+  "text": "고객님, 은행 직원에게 말 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "비밀 유지 요구 감지"
+  ],
+  "summary": "비밀 유지 요구 감지"
+ },
+ {
+  "text": "고객님, 혼자 오 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "비밀 유지 요구 감지"
+  ],
+  "summary": "비밀 유지 요구 감지"
+ },
+ {
+  "text": "고객님, 발설하지 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "비밀 유지 요구 감지"
+  ],
+  "summary": "비밀 유지 요구 감지"
+ },
+ {
+  "text": "고객님, 함구 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "비밀 유지 요구 감지"
+  ],
+  "summary": "비밀 유지 요구 감지"
+ },
+ {
+  "text": "고객님, 지정 장소 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "특정 장소 현금 전달 요구 감지"
+  ],
+  "summary": "특정 장소 현금 전달 요구 감지"
+ },
+ {
+  "text": "고객님, 지정된 장소 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "특정 장소 현금 전달 요구 감지"
+  ],
+  "summary": "특정 장소 현금 전달 요구 감지"
+ },
+ {
+  "text": "고객님, 장소로 가져 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "특정 장소 현금 전달 요구 감지"
+  ],
+  "summary": "특정 장소 현금 전달 요구 감지"
+ },
+ {
+  "text": "고객님, 가지고 오세요 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "특정 장소 현금 전달 요구 감지"
+  ],
+  "summary": "특정 장소 현금 전달 요구 감지"
+ },
+ {
+  "text": "고객님, 가져오세요 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "특정 장소 현금 전달 요구 감지"
+  ],
+  "summary": "특정 장소 현금 전달 요구 감지"
+ },
+ {
+  "text": "고객님, 직접 전달 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "특정 장소 현금 전달 요구 감지"
+  ],
+  "summary": "특정 장소 현금 전달 요구 감지"
+ },
+ {
+  "text": "고객님, 만나서 전달 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "특정 장소 현금 전달 요구 감지"
+  ],
+  "summary": "특정 장소 현금 전달 요구 감지"
+ },
+ {
+  "text": "고객님, 수거 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "특정 장소 현금 전달 요구 감지"
+  ],
+  "summary": "특정 장소 현금 전달 요구 감지"
+ },
+ {
+  "text": "고객님, 직원이 찾아 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "특정 장소 현금 전달 요구 감지"
+  ],
+  "summary": "특정 장소 현금 전달 요구 감지"
+ },
+ {
+  "text": "고객님, 수령하러 관련 안내입니다.",
+  "risk_level": "SAFE",
+  "risk_score": 25,
+  "reasons": [
+   "특정 장소 현금 전달 요구 감지"
+  ],
+  "summary": "특정 장소 현금 전달 요구 감지"
+ }
+]
