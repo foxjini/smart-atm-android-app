@@ -27,7 +27,8 @@ enum class CallStatus {
  * TCP/UDP 제어 메시지 종류
  */
 enum class MessageType {
-    DISCOVERY_BEACON,  // 방 존재 브로드캐스트
+    DISCOVERY_BEACON,  // 방 존재 브로드캐스트 (또는 탐색 요청에 대한 유니캐스트 응답)
+    DISCOVERY_REQUEST, // 방 탐색 요청 (서브넷 주소에 유니캐스트로 송신)
     CALL_OFFER,        // 전화 걸기 요청
     CALL_ANSWER,       // 전화 수락
     CALL_REJECT,       // 전화 거절

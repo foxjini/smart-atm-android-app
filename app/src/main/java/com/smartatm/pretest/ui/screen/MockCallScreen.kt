@@ -56,11 +56,13 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -73,6 +75,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.smartatm.pretest.mockcall.CallRole
 import com.smartatm.pretest.mockcall.CallStatus
+import com.smartatm.pretest.mockcall.NetworkUtils
 import com.smartatm.pretest.ui.MainViewModel
 import com.smartatm.pretest.ui.theme.RiskCautionBg
 import com.smartatm.pretest.ui.theme.RiskCautionYellow
@@ -96,7 +99,14 @@ fun MockCallScreen(
     val speechStatusText by viewModel.speechStatusText.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
     val authToken by viewModel.authToken.collectAsState()
-    var targetIpInput by remember { mutableStateOf("") }
+    // 기본 상대방 IP: 모바일 핫스팟(192.168.137.1) 환경
+    var targetIpInput by rememberSaveable { mutableStateOf(NetworkUtils.DEFAULT_PEER_IP) }
+
+    // 통화 화면이 열려 있는 동안에만 같은 Wi-Fi 서브넷에 방 탐색 요청 송신
+    DisposableEffect(Unit) {
+        viewModel.mockCallManager.setDiscoveryActive(true)
+        onDispose { viewModel.mockCallManager.setDiscoveryActive(false) }
+    }
 
     // 마이크 권한 허용 후 이어서 실행할 동작 (발신 / 수락 / 통화 중 STT 시작)
     var pendingPermissionAction by remember { mutableStateOf<(() -> Unit)?>(null) }
@@ -472,8 +482,8 @@ private fun InCallView(
             }
         }
 
-        // 실시간 통화 자막 창 (STT Transcript)
-        Card(
+        // 실시간 통화 자막 창 (STT Transcript) - 피해자 전용, 공격자는 통화 상태만 표시
+        if (isVictim) Card(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f),
@@ -625,6 +635,13 @@ private fun InCallView(
                     }
                 }
             }
+        } else {
+            AttackerCallPanel(
+                uiState = uiState,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+            )
         }
 
         // 시연용 퀵 대본 전송 버튼 (전시장/주변 소음 및 단독 테스트 대비용)
@@ -747,6 +764,63 @@ private fun InCallView(
                     modifier = Modifier.size(32.dp)
                 )
             }
+        }
+    }
+}
+
+/**
+ * 공격자 통화 화면 본문: 대화 내용(자막) 없이 통화 상태만 표시
+ */
+@Composable
+private fun AttackerCallPanel(
+    uiState: com.smartatm.pretest.mockcall.MockCallUiState,
+    modifier: Modifier = Modifier
+) {
+    val sentScripts = uiState.liveTranscript.count { it.speakerRole == CallRole.ATTACKER }
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(120.dp)
+                .background(Color(0xFFE8F5E9), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.PhoneInTalk,
+                contentDescription = null,
+                tint = Color(0xFF2E7D32),
+                modifier = Modifier.size(64.dp)
+            )
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(text = "통화 중", fontSize = 26.sp, fontWeight = FontWeight.Bold)
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(text = uiState.remotePeerIp ?: "상대방", fontSize = 15.sp, color = Color.DarkGray)
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = String.format("%02d:%02d", uiState.callDurationSeconds / 60, uiState.callDurationSeconds % 60),
+            fontSize = 20.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = Color(0xFF1E88E5)
+        )
+        Spacer(modifier = Modifier.height(20.dp))
+        Text(
+            text = "대화 내용과 보이스피싱 분석 결과는 피해자 기기에만 표시됩니다.",
+            fontSize = 13.sp,
+            color = Color.Gray,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
+        if (sentScripts > 0) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "✓ 전송한 시연 대본 ${sentScripts}개",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF2E7D32)
+            )
         }
     }
 }

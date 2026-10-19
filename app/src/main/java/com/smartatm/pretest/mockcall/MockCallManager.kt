@@ -63,6 +63,19 @@ class MockCallManager(
     private var clientJob: Job? = null
     private var beaconSendJob: Job? = null
     private var beaconListenJob: Job? = null
+    private var probeJob: Job? = null
+
+    // 탐색 리스너 소켓 (포트 8990): 탐색 요청 송신과 응답 수신에 함께 사용
+    @Volatile
+    private var discoverySocket: DatagramSocket? = null
+
+    // 이 기기가 방을 열고 상대를 기다리는 동안의 방 ID (탐색 요청에 응답할 때 사용)
+    @Volatile
+    private var advertisedRoomId: String? = null
+
+    // Mock 통화 화면이 열려 있을 때만 서브넷 탐색 요청을 보냄
+    @Volatile
+    private var discoveryActive = false
     private var timerJob: Job? = null
 
     // Accumulated conversation for analysis
@@ -72,6 +85,7 @@ class MockCallManager(
 
     init {
         startDiscoveryListener()
+        startSubnetProbe()
         // 발신 중 연결음 / 수신 중 벨소리를 통화 상태에 맞춰 자동 전환
         toneJob = coroutineScope.launch {
             uiState.map { it.callStatus }
@@ -458,23 +472,30 @@ class MockCallManager(
         timerJob = null
     }
 
+    /** Mock 통화 화면 진입/이탈 시 호출: 화면이 열려 있을 때만 서브넷 탐색 요청 송신 */
+    fun setDiscoveryActive(active: Boolean) {
+        discoveryActive = active
+    }
+
+    private fun buildBeacon(roomId: String) = ControlMessage(
+        type = MessageType.DISCOVERY_BEACON,
+        senderRole = _uiState.value.currentRole.name,
+        senderIp = _uiState.value.localIp,
+        roomId = roomId,
+        payload = instanceId
+    )
+
     // --- 방 비콘 브로드캐스트 (방 생성자용) ---
     private fun startBeaconSender(roomId: String) {
         beaconSendJob?.cancel()
+        advertisedRoomId = roomId
         beaconSendJob = coroutineScope.launch(Dispatchers.IO) {
             var socket: DatagramSocket? = null
             try {
                 socket = DatagramSocket().apply { broadcast = true }
 
                 while (isActive) {
-                    val beacon = ControlMessage(
-                        type = MessageType.DISCOVERY_BEACON,
-                        senderRole = _uiState.value.currentRole.name,
-                        senderIp = _uiState.value.localIp,
-                        roomId = roomId,
-                        payload = instanceId
-                    )
-                    val bytes = json.encodeToString(beacon).toByteArray()
+                    val bytes = json.encodeToString(buildBeacon(roomId)).toByteArray()
                     // Wi-Fi 서브넷 브로드캐스트 + 255.255.255.255 모두로 송신 (주소별 실패는 무시)
                     for (address in NetworkUtils.getBroadcastAddresses()) {
                         try {
@@ -494,8 +515,49 @@ class MockCallManager(
     }
 
     private fun stopBeaconSender() {
+        advertisedRoomId = null
         beaconSendJob?.cancel()
         beaconSendJob = null
+    }
+
+    // --- 서브넷 유니캐스트 탐색 요청 (참여자용) ---
+    // 핫스팟/공유기가 기기 간 브로드캐스트를 전달하지 않는 환경 대비: 같은 서브넷 주소마다 요청을 보내고
+    // 방을 연 기기가 요청자에게 유니캐스트로 비콘을 응답한다.
+    private fun startSubnetProbe() {
+        probeJob?.cancel()
+        probeJob = coroutineScope.launch(Dispatchers.IO) {
+            while (isActive) {
+                val socket = discoverySocket
+                if (discoveryActive && socket != null && _uiState.value.callStatus == CallStatus.IDLE) {
+                    val request = ControlMessage(
+                        type = MessageType.DISCOVERY_REQUEST,
+                        senderRole = _uiState.value.currentRole.name,
+                        senderIp = _uiState.value.localIp,
+                        payload = instanceId
+                    )
+                    val bytes = json.encodeToString(request).toByteArray()
+                    for (address in NetworkUtils.getSubnetProbeAddresses()) {
+                        if (!isActive) break
+                        try {
+                            socket.send(DatagramPacket(bytes, bytes.size, address, NetworkUtils.PORT_DISCOVERY))
+                        } catch (e: Exception) {
+                            // 개별 주소 실패 무시
+                        }
+                    }
+                }
+                delay(3000)
+            }
+        }
+    }
+
+    private fun replyToDiscoveryRequest(socket: DatagramSocket, requester: java.net.SocketAddress) {
+        val roomId = advertisedRoomId ?: return
+        try {
+            val bytes = json.encodeToString(buildBeacon(roomId)).toByteArray()
+            socket.send(DatagramPacket(bytes, bytes.size, requester))
+        } catch (e: Exception) {
+            Log.d(TAG, "Discovery reply failed: ${e.message}")
+        }
     }
 
     // --- 방 비콘 수신 리스너 (참여자용) ---
@@ -522,6 +584,7 @@ class MockCallManager(
                     }
                 }
                 val buffer = ByteArray(2048)
+                discoverySocket = socket
 
                 while (isActive) {
                     try {
@@ -530,7 +593,10 @@ class MockCallManager(
                         val raw = String(packet.data, 0, packet.length)
                         val beacon = json.decodeFromString<ControlMessage>(raw)
 
-                        if (beacon.type == MessageType.DISCOVERY_BEACON && beacon.roomId != null &&
+                        if (beacon.type == MessageType.DISCOVERY_REQUEST && beacon.payload != instanceId) {
+                            // 다른 기기의 탐색 요청: 방을 열고 있으면 요청자에게 직접 응답
+                            replyToDiscoveryRequest(socket, packet.socketAddress)
+                        } else if (beacon.type == MessageType.DISCOVERY_BEACON && beacon.roomId != null &&
                             beacon.payload != instanceId
                         ) {
                             val role = if (beacon.senderRole == CallRole.ATTACKER.name) CallRole.ATTACKER else CallRole.VICTIM
@@ -552,6 +618,7 @@ class MockCallManager(
             } catch (e: Exception) {
                 Log.w(TAG, "Discovery listener closed: ${e.message}")
             } finally {
+                discoverySocket = null
                 socket?.close()
                 multicastLock.release()
             }
@@ -615,6 +682,8 @@ class MockCallManager(
         resetConnection()
         beaconListenJob?.cancel()
         beaconListenJob = null
+        probeJob?.cancel()
+        probeJob = null
         toneJob?.cancel()
         toneJob = null
         tonePlayer.stopAll()

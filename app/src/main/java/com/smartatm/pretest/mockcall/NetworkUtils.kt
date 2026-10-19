@@ -10,6 +10,11 @@ object NetworkUtils {
     const val PORT_AUDIO = 8989       // UDP audio stream
     const val PORT_DISCOVERY = 8990   // UDP discovery beacon
 
+    // 수동 연결 기본 상대방 IP (Windows 모바일 핫스팟의 호스트 주소)
+    const val DEFAULT_PEER_IP = "192.168.137.1"
+
+    private const val MAX_PROBE_HOSTS = 1024
+
     /**
      * 현재 기기의 로컬 Wi-Fi 또는 활성화된 사설 IPv4 주소(192.168.x.x 또는 10.x.x.x 등)를 반환합니다.
      */
@@ -54,6 +59,45 @@ object NetworkUtils {
     private fun isWifiInterfaceName(name: String): Boolean {
         val n = name.lowercase()
         return n.contains("wlan") || n.startsWith("ap") || n.startsWith("softap")
+    }
+
+    /**
+     * 방 탐색 요청을 유니캐스트로 보낼 같은 Wi-Fi 서브넷의 상대 주소 목록 (자기 주소 제외).
+     * 핫스팟/공유기가 기기 간 브로드캐스트를 전달하지 않아도, IP 직접 연결이 되는 환경이면 탐색된다.
+     * 서브넷이 /22 보다 넓으면 자기 주소가 속한 /24 만 탐색한다.
+     */
+    fun getSubnetProbeAddresses(): List<InetAddress> {
+        val result = LinkedHashSet<InetAddress>()
+        try {
+            val interfaces = Collections.list(NetworkInterface.getNetworkInterfaces())
+                .filter { !it.isLoopback && it.isUp && isWifiInterfaceName(it.name) }
+            for (intf in interfaces) {
+                for (ifAddr in intf.interfaceAddresses) {
+                    val addr = ifAddr.address as? Inet4Address ?: continue
+                    if (!addr.isSiteLocalAddress) continue
+                    val prefix = ifAddr.networkPrefixLength.toInt().coerceIn(22, 30)
+                    val ip = addr.address.fold(0L) { acc, b -> (acc shl 8) or (b.toLong() and 0xFF) }
+                    val mask = (0xFFFFFFFFL shl (32 - prefix)) and 0xFFFFFFFFL
+                    val network = ip and mask
+                    val broadcast = network or (mask.inv() and 0xFFFFFFFFL)
+                    var host = network + 1
+                    while (host < broadcast && result.size < MAX_PROBE_HOSTS) {
+                        if (host != ip) {
+                            result += InetAddress.getByAddress(
+                                byteArrayOf(
+                                    (host shr 24).toByte(), (host shr 16).toByte(),
+                                    (host shr 8).toByte(), host.toByte()
+                                )
+                            )
+                        }
+                        host++
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return result.toList()
     }
 
     /**
